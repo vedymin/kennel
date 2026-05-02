@@ -121,13 +121,13 @@
 		</button>
 	</form>
 
-	{#if Object.keys(errors).length > 0}
-		<div aria-live="polite" class="text-red-600 text-sm mb-4">
+	<div aria-live="polite" class="text-red-600 text-sm mb-4">
+		{#if Object.keys(errors).length > 0}
 			{#each Object.values(errors) as msg}
 				<p>{msg}</p>
 			{/each}
-		</div>
-	{/if}
+		{/if}
+	</div>
 
 	{#if loading}
 		<p>Ładowanie...</p>
