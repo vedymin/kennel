@@ -130,7 +130,7 @@
 	{/if}
 
 	{#if loading}
-		<p>Ładowanie…</p>
+		<p>Ładowanie...</p>
 	{:else if fetchError}
 		<div>
 			<p>Nie udało się pobrać rezerwacji.</p>
