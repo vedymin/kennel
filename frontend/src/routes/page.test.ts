@@ -243,6 +243,128 @@ describe('Reservation list', () => {
 		expect(await screen.findByRole('row', { name: /Burek 2026-05-10 2026-05-12/i })).toBeInTheDocument();
 	});
 
+	it('opens a dog-specific delete confirmation dialog from a row action', async () => {
+		const user = userEvent.setup();
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve([
+				{
+					id: 1,
+					dogName: 'Burek',
+					startDate: '2026-05-10',
+					endDate: '2026-05-12',
+					createdAt: '2026-05-02T10:00:00Z'
+				}
+			])
+		}));
+
+		render(Page);
+
+		await user.click(await screen.findByRole('button', { name: 'Usuń rezerwację dla Burek' }));
+
+		const dialog = screen.getByRole('dialog', { name: /usunąć rezerwację/i });
+		expect(dialog).toHaveTextContent('Burek');
+		expect(screen.getByRole('button', { name: 'Anuluj' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Usuń' })).toBeInTheDocument();
+	});
+
+	it('cancels deletion without calling the delete endpoint or changing the list', async () => {
+		const user = userEvent.setup();
+		const fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve([
+				{
+					id: 1,
+					dogName: 'Burek',
+					startDate: '2026-05-10',
+					endDate: '2026-05-12',
+					createdAt: '2026-05-02T10:00:00Z'
+				}
+			])
+		});
+		vi.stubGlobal('fetch', fetch);
+
+		render(Page);
+
+		await user.click(await screen.findByRole('button', { name: 'Usuń rezerwację dla Burek' }));
+		await user.click(screen.getByRole('button', { name: 'Anuluj' }));
+
+		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+		expect(screen.getByRole('row', { name: /Burek 2026-05-10 2026-05-12/i })).toBeInTheDocument();
+		expect(fetch).not.toHaveBeenCalledWith(`${API}/1`, expect.objectContaining({ method: 'DELETE' }));
+	});
+
+	it('waits for delete to finish before closing the dialog and refreshes the list on success', async () => {
+		const user = userEvent.setup();
+		let resolveDelete: (value: Response) => void;
+		const deletePromise = new Promise<Response>((resolve) => { resolveDelete = resolve; });
+		const fetch = vi.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve([
+					{
+						id: 1,
+						dogName: 'Burek',
+						startDate: '2026-05-10',
+						endDate: '2026-05-12',
+						createdAt: '2026-05-02T10:00:00Z'
+					}
+				])
+			})
+			.mockImplementationOnce(() => deletePromise)
+			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) });
+		vi.stubGlobal('fetch', fetch);
+
+		render(Page);
+
+		await user.click(await screen.findByRole('button', { name: 'Usuń rezerwację dla Burek' }));
+		await user.click(screen.getByRole('button', { name: 'Usuń' }));
+
+		expect(fetch).toHaveBeenCalledWith(`${API}/1`, { method: 'DELETE' });
+		expect(screen.getByRole('dialog')).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Usuwanie...' })).toBeDisabled();
+		expect(screen.getByRole('row', { name: /Burek 2026-05-10 2026-05-12/i })).toBeInTheDocument();
+
+		resolveDelete!(new Response(null, { status: 204 }));
+
+		await waitFor(() => {
+			expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+			expect(screen.getByText('Brak rezerwacji. Dodaj pierwszą powyżej.')).toBeInTheDocument();
+		});
+		expect(fetch).toHaveBeenCalledTimes(3);
+	});
+
+	it('blocks duplicate delete submissions while deletion is pending', async () => {
+		const user = userEvent.setup();
+		const deletePromise = new Promise<Response>(() => {});
+		const fetch = vi.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve([
+					{
+						id: 1,
+						dogName: 'Burek',
+						startDate: '2026-05-10',
+						endDate: '2026-05-12',
+						createdAt: '2026-05-02T10:00:00Z'
+					}
+				])
+			})
+			.mockImplementationOnce(() => deletePromise);
+		vi.stubGlobal('fetch', fetch);
+
+		render(Page);
+
+		await user.click(await screen.findByRole('button', { name: 'Usuń rezerwację dla Burek' }));
+		const confirm = screen.getByRole('button', { name: 'Usuń' });
+		await user.click(confirm);
+		await user.click(confirm);
+
+		const deleteCalls = fetch.mock.calls.filter(([, opts]) => opts?.method === 'DELETE');
+		expect(deleteCalls).toHaveLength(1);
+		expect(screen.getByRole('button', { name: 'Usuwanie...' })).toBeDisabled();
+	});
+
 	it('dims past reservations and tags them as finished', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
 			ok: true,

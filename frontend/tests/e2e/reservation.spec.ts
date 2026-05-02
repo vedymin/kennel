@@ -29,3 +29,28 @@ test('user can add a reservation and see it in the list', async ({ page }) => {
 
 	await expect(page.getByRole('row', { name: new RegExp(dogName) })).toBeVisible();
 });
+
+test('user can delete a visible reservation after confirmation', async ({ page }) => {
+	const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+	const dayAfter = new Date(Date.now() + 172_800_000).toISOString().slice(0, 10);
+	const dogName = `Azor ${Date.now()}`;
+
+	const createResponse = await page.request.post('http://localhost:5174/api/reservations', {
+		data: { dogName, startDate: tomorrow, endDate: dayAfter }
+	});
+	expect(createResponse.ok()).toBeTruthy();
+
+	await page.goto('/');
+
+	const row = page.getByRole('row', { name: new RegExp(dogName) });
+	await expect(row).toBeVisible();
+
+	await page.getByRole('button', { name: `Usuń rezerwację dla ${dogName}` }).click();
+	const dialog = page.getByRole('dialog', { name: /usunąć rezerwację/i });
+	await expect(dialog).toContainText(dogName);
+
+	await dialog.getByRole('button', { name: 'Usuń' }).click();
+
+	await expect(dialog).toBeHidden();
+	await expect(row).toBeHidden();
+});

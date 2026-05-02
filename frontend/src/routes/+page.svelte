@@ -17,6 +17,8 @@
 	let reservations = $state<Reservation[]>([]);
 	let loading = $state(true);
 	let fetchError = $state(false);
+	let reservationToDelete = $state<Reservation | null>(null);
+	let deleting = $state(false);
 
 	const canSubmit = $derived(dogName.trim() !== '' && startDate !== '' && endDate !== '');
 
@@ -67,6 +69,30 @@
 	function isPast(reservation: Reservation): boolean {
 		const today = new Date().toISOString().split('T')[0];
 		return reservation.endDate < today;
+	}
+
+	function requestDelete(reservation: Reservation) {
+		reservationToDelete = reservation;
+	}
+
+	function cancelDelete() {
+		if (deleting) return;
+		reservationToDelete = null;
+	}
+
+	async function confirmDelete() {
+		if (!reservationToDelete || deleting) return;
+
+		deleting = true;
+		try {
+			const res = await fetch(`${API}/${reservationToDelete.id}`, { method: 'DELETE' });
+			if (res.ok) {
+				reservationToDelete = null;
+				await loadReservations();
+			}
+		} finally {
+			deleting = false;
+		}
 	}
 
 	$effect(() => {
@@ -145,7 +171,7 @@
 					<th class="py-2">Imię psa</th>
 					<th class="py-2">Od</th>
 					<th class="py-2">Do</th>
-					<th class="py-2"></th>
+					<th class="py-2">Akcje</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -154,10 +180,58 @@
 						<td class="py-2">{r.dogName}</td>
 						<td class="py-2">{r.startDate}</td>
 						<td class="py-2">{r.endDate}</td>
-						<td class="py-2">{isPast(r) ? 'zakończona' : ''}</td>
+						<td class="py-2">
+							<div class="flex items-center gap-3">
+								<span>{isPast(r) ? 'zakończona' : ''}</span>
+								<button
+									type="button"
+									aria-label={`Usuń rezerwację dla ${r.dogName}`}
+									onclick={() => requestDelete(r)}
+									class="text-red-700 underline"
+								>
+									Usuń
+								</button>
+							</div>
+						</td>
 					</tr>
 				{/each}
 			</tbody>
 		</table>
+	{/if}
+
+	{#if reservationToDelete}
+		<div class="fixed inset-0 bg-black/40 flex items-center justify-center p-6">
+			<div
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="delete-reservation-title"
+				class="w-full max-w-sm rounded bg-white p-6 shadow-lg"
+			>
+				<h2 id="delete-reservation-title" class="text-lg font-semibold mb-3">
+					Usunąć rezerwację?
+				</h2>
+				<p class="mb-6">
+					Czy na pewno usunąć rezerwację dla {reservationToDelete.dogName}?
+				</p>
+				<div class="flex justify-end gap-3">
+					<button
+						type="button"
+						onclick={cancelDelete}
+						disabled={deleting}
+						class="border rounded px-4 py-2 disabled:opacity-50"
+					>
+						Anuluj
+					</button>
+					<button
+						type="button"
+						onclick={confirmDelete}
+						disabled={deleting}
+						class="bg-red-700 text-white rounded px-4 py-2 disabled:opacity-50"
+					>
+						{deleting ? 'Usuwanie...' : 'Usuń'}
+					</button>
+				</div>
+			</div>
+		</div>
 	{/if}
 </main>
