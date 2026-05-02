@@ -107,6 +107,38 @@ test('deleting the last reservation shows empty state', async ({ page }) => {
 	await expect(page.getByText('Brak rezerwacji. Dodaj pierwszą powyżej.')).toBeVisible();
 });
 
+test('treats a 404 delete as successful absence', async ({ page }) => {
+	const reservation = {
+		id: 42,
+		dogName: 'Fantom',
+		startDate: '2026-06-10',
+		endDate: '2026-06-12',
+		createdAt: '2026-05-02T10:00:00Z'
+	};
+
+	await page.route('http://localhost:5174/api/reservations', async (route) => {
+		if (route.request().method() === 'GET') {
+			await route.fulfill({ json: [reservation] });
+			return;
+		}
+		await route.fallback();
+	});
+	await page.route('http://localhost:5174/api/reservations/42', async (route) => {
+		if (route.request().method() === 'DELETE') {
+			await route.fulfill({ status: 404 });
+			return;
+		}
+		await route.fallback();
+	});
+
+	await page.goto('/');
+
+	await page.getByRole('button', { name: 'Usuń rezerwację dla Fantom' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Usuń' }).click();
+
+	await expect(page.getByRole('dialog')).toBeHidden();
+});
+
 test('user can delete a visible reservation after confirmation', async ({ page }) => {
 	const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 	const dayAfter = new Date(Date.now() + 172_800_000).toISOString().slice(0, 10);

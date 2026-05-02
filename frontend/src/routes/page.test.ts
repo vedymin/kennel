@@ -334,6 +334,107 @@ describe('Reservation list', () => {
 		expect(fetch).toHaveBeenCalledTimes(3);
 	});
 
+	it('keeps the delete dialog open with a retryable error when deletion fails', async () => {
+		const user = userEvent.setup();
+		const fetch = vi.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve([
+					{
+						id: 1,
+						dogName: 'Burek',
+						startDate: '2026-05-10',
+						endDate: '2026-05-12',
+						createdAt: '2026-05-02T10:00:00Z'
+					}
+				])
+			})
+			.mockResolvedValueOnce(new Response(null, { status: 500 }));
+		vi.stubGlobal('fetch', fetch);
+
+		render(Page);
+
+		await user.click(await screen.findByRole('button', { name: 'Usuń rezerwację dla Burek' }));
+		await user.click(screen.getByRole('button', { name: 'Usuń' }));
+
+		const dialog = screen.getByRole('dialog', { name: /usunąć rezerwację/i });
+		expect(dialog).toBeInTheDocument();
+		expect(dialog).toHaveTextContent('Nie udało się usunąć rezerwacji. Spróbuj ponownie.');
+		expect(screen.getByRole('row', { name: /Burek 2026-05-10 2026-05-12/i })).toBeInTheDocument();
+		expect(fetch).toHaveBeenCalledTimes(2);
+	});
+
+	it('retries deletion from the same dialog after a retryable failure', async () => {
+		const user = userEvent.setup();
+		const fetch = vi.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve([
+					{
+						id: 1,
+						dogName: 'Burek',
+						startDate: '2026-05-10',
+						endDate: '2026-05-12',
+						createdAt: '2026-05-02T10:00:00Z'
+					}
+				])
+			})
+			.mockResolvedValueOnce(new Response(null, { status: 500 }))
+			.mockResolvedValueOnce(new Response(null, { status: 204 }))
+			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) });
+		vi.stubGlobal('fetch', fetch);
+
+		render(Page);
+
+		await user.click(await screen.findByRole('button', { name: 'Usuń rezerwację dla Burek' }));
+		await user.click(screen.getByRole('button', { name: 'Usuń' }));
+		expect(screen.getByRole('dialog', { name: /usunąć rezerwację/i })).toHaveTextContent(
+			'Nie udało się usunąć rezerwacji. Spróbuj ponownie.'
+		);
+
+		await user.click(screen.getByRole('button', { name: 'Usuń' }));
+
+		await waitFor(() => {
+			expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+			expect(screen.getByText('Brak rezerwacji. Dodaj pierwszą powyżej.')).toBeInTheDocument();
+		});
+		const deleteCalls = fetch.mock.calls.filter(([, opts]) => opts?.method === 'DELETE');
+		expect(deleteCalls).toHaveLength(2);
+	});
+
+	it('cancels the delete dialog after a retryable failure without changing the list', async () => {
+		const user = userEvent.setup();
+		const fetch = vi.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve([
+					{
+						id: 1,
+						dogName: 'Burek',
+						startDate: '2026-05-10',
+						endDate: '2026-05-12',
+						createdAt: '2026-05-02T10:00:00Z'
+					}
+				])
+			})
+			.mockResolvedValueOnce(new Response(null, { status: 500 }));
+		vi.stubGlobal('fetch', fetch);
+
+		render(Page);
+
+		await user.click(await screen.findByRole('button', { name: 'Usuń rezerwację dla Burek' }));
+		await user.click(screen.getByRole('button', { name: 'Usuń' }));
+		expect(screen.getByRole('dialog', { name: /usunąć rezerwację/i })).toHaveTextContent(
+			'Nie udało się usunąć rezerwacji. Spróbuj ponownie.'
+		);
+
+		await user.click(screen.getByRole('button', { name: 'Anuluj' }));
+
+		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+		expect(screen.getByRole('row', { name: /Burek 2026-05-10 2026-05-12/i })).toBeInTheDocument();
+		expect(fetch).toHaveBeenCalledTimes(2);
+	});
+
 	it('blocks duplicate delete submissions while deletion is pending', async () => {
 		const user = userEvent.setup();
 		const deletePromise = new Promise<Response>(() => {});
@@ -362,6 +463,38 @@ describe('Reservation list', () => {
 
 		const deleteCalls = fetch.mock.calls.filter(([, opts]) => opts?.method === 'DELETE');
 		expect(deleteCalls).toHaveLength(1);
+		expect(screen.getByRole('button', { name: 'Usuwanie...' })).toBeDisabled();
+	});
+
+	it('blocks duplicate delete submissions while a retry is pending', async () => {
+		const user = userEvent.setup();
+		const retryPromise = new Promise<Response>(() => {});
+		const fetch = vi.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve([
+					{
+						id: 1,
+						dogName: 'Burek',
+						startDate: '2026-05-10',
+						endDate: '2026-05-12',
+						createdAt: '2026-05-02T10:00:00Z'
+					}
+				])
+			})
+			.mockResolvedValueOnce(new Response(null, { status: 500 }))
+			.mockImplementationOnce(() => retryPromise);
+		vi.stubGlobal('fetch', fetch);
+
+		render(Page);
+
+		await user.click(await screen.findByRole('button', { name: 'Usuń rezerwację dla Burek' }));
+		await user.click(screen.getByRole('button', { name: 'Usuń' }));
+		await user.click(screen.getByRole('button', { name: 'Usuń' }));
+		await user.click(screen.getByRole('button', { name: 'Usuwanie...' }));
+
+		const deleteCalls = fetch.mock.calls.filter(([, opts]) => opts?.method === 'DELETE');
+		expect(deleteCalls).toHaveLength(2);
 		expect(screen.getByRole('button', { name: 'Usuwanie...' })).toBeDisabled();
 	});
 
@@ -398,6 +531,37 @@ describe('Reservation list', () => {
 		});
 
 		expect(fetch).toHaveBeenCalledWith(`${API}/1`, { method: 'DELETE' });
+	});
+
+	it('treats a 404 delete response as successful absence and refreshes the list', async () => {
+		const user = userEvent.setup();
+		const fetch = vi.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve([
+					{
+						id: 1,
+						dogName: 'Burek',
+						startDate: '2026-05-10',
+						endDate: '2026-05-12',
+						createdAt: '2026-05-02T10:00:00Z'
+					}
+				])
+			})
+			.mockImplementationOnce(() => Promise.resolve(new Response(null, { status: 404 })))
+			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) });
+		vi.stubGlobal('fetch', fetch);
+
+		render(Page);
+
+		await user.click(await screen.findByRole('button', { name: 'Usuń rezerwację dla Burek' }));
+		await user.click(screen.getByRole('button', { name: 'Usuń' }));
+
+		await waitFor(() => {
+			expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+			expect(screen.getByText('Brak rezerwacji. Dodaj pierwszą powyżej.')).toBeInTheDocument();
+		});
+		expect(fetch).toHaveBeenCalledTimes(3);
 	});
 
 	it('dims past reservations and tags them as finished', async () => {
