@@ -30,6 +30,83 @@ test('user can add a reservation and see it in the list', async ({ page }) => {
 	await expect(page.getByRole('row', { name: new RegExp(dogName) })).toBeVisible();
 });
 
+test('user can delete a past reservation through the same workflow', async ({ page }) => {
+	const pastReservation = {
+		id: 99,
+		dogName: 'Senior',
+		startDate: '2025-01-10',
+		endDate: '2025-01-12',
+		createdAt: '2025-01-09T10:00:00Z'
+	};
+	let deleted = false;
+
+	await page.route('http://localhost:5174/api/reservations', async (route) => {
+		if (route.request().method() === 'GET') {
+			await route.fulfill({ json: deleted ? [] : [pastReservation] });
+			return;
+		}
+		await route.fallback();
+	});
+	await page.route('http://localhost:5174/api/reservations/99', async (route) => {
+		if (route.request().method() === 'DELETE') {
+			deleted = true;
+			await route.fulfill({ status: 204 });
+			return;
+		}
+		await route.fallback();
+	});
+
+	await page.goto('/');
+
+	const row = page.getByRole('row', { name: /Senior/ });
+	await expect(row).toBeVisible();
+	await expect(row).toHaveCSS('opacity', '0.5');
+
+	await page.getByRole('button', { name: 'Usuń rezerwację dla Senior' }).click();
+	const dialog = page.getByRole('dialog', { name: /usunąć rezerwację/i });
+	await expect(dialog).toContainText('Senior');
+
+	await dialog.getByRole('button', { name: 'Usuń' }).click();
+
+	await expect(dialog).toBeHidden();
+	await expect(row).toBeHidden();
+});
+
+test('deleting the last reservation shows empty state', async ({ page }) => {
+	const reservation = {
+		id: 1,
+		dogName: 'Burek',
+		startDate: '2026-06-10',
+		endDate: '2026-06-12',
+		createdAt: '2026-05-02T10:00:00Z'
+	};
+	let deleted = false;
+
+	await page.route('http://localhost:5174/api/reservations', async (route) => {
+		if (route.request().method() === 'GET') {
+			await route.fulfill({ json: deleted ? [] : [reservation] });
+			return;
+		}
+		await route.fallback();
+	});
+	await page.route('http://localhost:5174/api/reservations/1', async (route) => {
+		if (route.request().method() === 'DELETE') {
+			deleted = true;
+			await route.fulfill({ status: 204 });
+			return;
+		}
+		await route.fallback();
+	});
+
+	await page.goto('/');
+	await expect(page.getByRole('row', { name: /Burek/ })).toBeVisible();
+
+	await page.getByRole('button', { name: 'Usuń rezerwację dla Burek' }).click();
+	await page.getByRole('dialog').getByRole('button', { name: 'Usuń' }).click();
+
+	await expect(page.getByText('Brak rezerwacji. Dodaj pierwszą powyżej.')).toBeVisible();
+});
+
 test('user can delete a visible reservation after confirmation', async ({ page }) => {
 	const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 	const dayAfter = new Date(Date.now() + 172_800_000).toISOString().slice(0, 10);

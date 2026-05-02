@@ -365,6 +365,41 @@ describe('Reservation list', () => {
 		expect(screen.getByRole('button', { name: 'Usuwanie...' })).toBeDisabled();
 	});
 
+	it('deletes a past reservation through the same dialog workflow', async () => {
+		const user = userEvent.setup();
+		const fetch = vi.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve([
+					{
+						id: 1,
+						dogName: 'Senior',
+						startDate: '2025-01-10',
+						endDate: '2025-01-12',
+						createdAt: '2025-01-09T10:00:00Z'
+					}
+				])
+			})
+			.mockImplementationOnce(() => Promise.resolve(new Response(null, { status: 204 })))
+			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) });
+		vi.stubGlobal('fetch', fetch);
+
+		render(Page);
+
+		await user.click(await screen.findByRole('button', { name: 'Usuń rezerwację dla Senior' }));
+
+		const dialog = screen.getByRole('dialog', { name: /usunąć rezerwację/i });
+		expect(dialog).toHaveTextContent('Senior');
+
+		await user.click(screen.getByRole('button', { name: 'Usuń' }));
+
+		await waitFor(() => {
+			expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+		});
+
+		expect(fetch).toHaveBeenCalledWith(`${API}/1`, { method: 'DELETE' });
+	});
+
 	it('dims past reservations and tags them as finished', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
 			ok: true,
