@@ -121,4 +121,112 @@ describe('Reservation form', () => {
 			expect(endDate).toHaveValue('');
 		});
 	});
+
+	it('reloads the reservation list after successful submission', async () => {
+		const user = userEvent.setup();
+		const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+		const dayAfter = new Date(Date.now() + 172800000).toISOString().split('T')[0];
+		const fetch = vi.fn()
+			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 201,
+				json: () => Promise.resolve({ id: 1, dogName: 'Burek', startDate: tomorrow, endDate: dayAfter, createdAt: new Date().toISOString() })
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				json: () => Promise.resolve([
+					{ id: 1, dogName: 'Burek', startDate: tomorrow, endDate: dayAfter, createdAt: new Date().toISOString() }
+				])
+			});
+		vi.stubGlobal('fetch', fetch);
+
+		render(Page);
+
+		await user.type(screen.getByLabelText(/imię psa/i), 'Burek');
+		await user.type(screen.getByLabelText(/od/i), tomorrow);
+		await user.type(screen.getByLabelText(/do/i), dayAfter);
+		await user.click(screen.getByRole('button', { name: /dodaj/i }));
+
+		expect(await screen.findByRole('row', { name: new RegExp(`Burek ${tomorrow} ${dayAfter}`, 'i') })).toBeInTheDocument();
+		expect(fetch).toHaveBeenCalledTimes(3);
+	});
+});
+
+describe('Reservation list', () => {
+	it('shows loading state during initial fetch', () => {
+		vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})));
+
+		render(Page);
+
+		expect(screen.getByText('Ladowanie...')).toBeInTheDocument();
+	});
+
+	it('shows empty state when there are no reservations', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve([])
+		}));
+
+		render(Page);
+
+		expect(await screen.findByText('Brak rezerwacji. Dodaj pierwsza powyzej.')).toBeInTheDocument();
+	});
+
+	it('shows fetch error and retries when requested', async () => {
+		const user = userEvent.setup();
+		const fetch = vi.fn()
+			.mockResolvedValueOnce({ ok: false })
+			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) });
+		vi.stubGlobal('fetch', fetch);
+
+		render(Page);
+
+		expect(await screen.findByText('Nie udalo sie pobrac rezerwacji.')).toBeInTheDocument();
+		await user.click(screen.getByRole('button', { name: 'Sprobuj ponownie' }));
+
+		await waitFor(() => {
+			expect(fetch).toHaveBeenCalledTimes(2);
+			expect(screen.getByText('Brak rezerwacji. Dodaj pierwsza powyzej.')).toBeInTheDocument();
+		});
+	});
+
+	it('renders populated reservations', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve([
+				{
+					id: 1,
+					dogName: 'Burek',
+					startDate: '2026-05-10',
+					endDate: '2026-05-12',
+					createdAt: '2026-05-02T10:00:00Z'
+				}
+			])
+		}));
+
+		render(Page);
+
+		expect(await screen.findByRole('row', { name: /Burek 2026-05-10 2026-05-12/i })).toBeInTheDocument();
+	});
+
+	it('dims past reservations and tags them as finished', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve([
+				{
+					id: 1,
+					dogName: 'Senior',
+					startDate: '2026-04-20',
+					endDate: '2026-04-21',
+					createdAt: '2026-05-02T10:00:00Z'
+				}
+			])
+		}));
+
+		render(Page);
+
+		const row = await screen.findByRole('row', { name: /Senior 2026-04-20 2026-04-21 zakonczona/i });
+		expect(row).toHaveClass('opacity-50');
+	});
 });

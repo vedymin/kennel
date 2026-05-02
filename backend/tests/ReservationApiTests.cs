@@ -39,6 +39,20 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
 
     private HttpClient CreateClient() => _factory.CreateClient();
 
+    private async Task SeedReservation(string dogName, DateOnly startDate, DateOnly endDate)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<KennelDb>();
+        db.Reservations.Add(new Reservation
+        {
+            DogName = dogName,
+            StartDate = startDate,
+            EndDate = endDate,
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task Post_ValidReservation_Returns201WithBody()
     {
@@ -189,5 +203,34 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.True(list.Length >= 2);
         Assert.Equal("Burek", list[0].GetProperty("dogName").GetString());
         Assert.Equal("Azor", list[1].GetProperty("dogName").GetString());
+    }
+
+    [Fact]
+    public async Task Get_WhenNoReservations_ReturnsEmptyList()
+    {
+        var client = CreateClient();
+
+        var response = await client.GetAsync("/api/reservations");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var list = await response.Content.ReadFromJsonAsync<JsonElement[]>();
+        Assert.NotNull(list);
+        Assert.Empty(list);
+    }
+
+    [Fact]
+    public async Task Get_IncludesPastReservations()
+    {
+        var client = CreateClient();
+        var pastStart = DateOnly.FromDateTime(DateTime.Today.AddDays(-3));
+        var pastEnd = DateOnly.FromDateTime(DateTime.Today.AddDays(-1));
+        await SeedReservation("Senior", pastStart, pastEnd);
+
+        var response = await client.GetAsync("/api/reservations");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var list = await response.Content.ReadFromJsonAsync<JsonElement[]>();
+        Assert.NotNull(list);
+        Assert.Contains(list, r => r.GetProperty("dogName").GetString() == "Senior");
     }
 }

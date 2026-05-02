@@ -130,14 +130,14 @@
 	{/if}
 
 	{#if loading}
-		<p>Ładowanie…</p>
+		<p>Ladowanie...</p>
 	{:else if fetchError}
 		<div>
-			<p>Nie udało się pobrać rezerwacji.</p>
-			<button onclick={loadReservations} class="text-blue-600 underline">Spróbuj ponownie</button>
+			<p>Nie udalo sie pobrac rezerwacji.</p>
+			<button onclick={loadReservations} class="text-blue-600 underline">Sprobuj ponownie</button>
 		</div>
 	{:else if reservations.length === 0}
-		<p class="text-gray-500">Brak rezerwacji. Dodaj pierwszą powyżej.</p>
+		<p class="text-gray-500">Brak rezerwacji. Dodaj pierwsza powyzej.</p>
 	{:else}
 		<table class="w-full text-left border-collapse">
 			<thead>
@@ -154,7 +154,7 @@
 						<td class="py-2">{r.dogName}</td>
 						<td class="py-2">{r.startDate}</td>
 						<td class="py-2">{r.endDate}</td>
-						<td class="py-2">{isPast(r) ? 'zakończona' : ''}</td>
+						<td class="py-2">{isPast(r) ? 'zakonczona' : ''}</td>
 					</tr>
 				{/each}
 			</tbody>
