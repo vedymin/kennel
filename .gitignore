@@ -1,17 +1,19 @@
 # .NET
 bin/
 obj/
+TestResults/
 *.user
 *.suo
 *.db
 *.db-shm
 *.db-wal
 
-# Node / SvelteKit
+# Node/SvelteKit
 node_modules/
 .svelte-kit/
 build/
 dist/
+.vite/
 
 # IDE
 .vs/
@@ -28,3 +30,11 @@ Desktop.ini
 .env
 .env.*
 !.env.example
+
+# Local app data
+backend/*.db
+backend/*.db-*
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
