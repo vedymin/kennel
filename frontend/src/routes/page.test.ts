@@ -88,6 +88,39 @@ describe('Reservation form', () => {
 		});
 	});
 
+	it('announces server validation errors in a polite live region', async () => {
+		const user = userEvent.setup();
+
+		vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, opts?: RequestInit) => {
+			if (opts?.method === 'POST') {
+				return Promise.resolve({
+					ok: false,
+					status: 400,
+					json: () => Promise.resolve({ errors: { dogName: 'ImiÄ™ psa jest wymagane.' } })
+				});
+			}
+			return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+		}));
+
+		render(Page);
+
+		const liveRegion = document.querySelector('[aria-live="polite"]');
+		expect(liveRegion).toBeInTheDocument();
+		expect(liveRegion).toBeEmptyDOMElement();
+
+		const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+		const dayAfter = new Date(Date.now() + 172800000).toISOString().split('T')[0];
+
+		await user.type(screen.getByLabelText(/psa/i), 'x');
+		await user.type(screen.getByLabelText(/od/i), tomorrow);
+		await user.type(screen.getByLabelText(/do/i), dayAfter);
+		await user.click(screen.getByRole('button', { name: /dodaj/i }));
+
+		await waitFor(() => {
+			expect(liveRegion).toHaveTextContent('ImiÄ™ psa jest wymagane.');
+		});
+	});
+
 	it('clears form on successful submission', async () => {
 		const user = userEvent.setup();
 		const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
