@@ -39,6 +39,19 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
 
     private HttpClient CreateClient() => _factory.CreateClient();
 
+    private static async Task<int> CreateReservation(HttpClient client, string dogName, DateOnly startDate, DateOnly endDate)
+    {
+        var response = await client.PostAsJsonAsync("/api/reservations", new
+        {
+            dogName,
+            startDate = startDate.ToString("yyyy-MM-dd"),
+            endDate = endDate.ToString("yyyy-MM-dd")
+        });
+        var created = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        return created.GetProperty("id").GetInt32();
+    }
+
     private async Task SeedReservation(string dogName, DateOnly startDate, DateOnly endDate)
     {
         using var scope = _factory.Services.CreateScope();
@@ -232,5 +245,43 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         var list = await response.Content.ReadFromJsonAsync<JsonElement[]>();
         Assert.NotNull(list);
         Assert.Contains(list, r => r.GetProperty("dogName").GetString() == "Senior");
+    }
+
+    [Fact]
+    public async Task Delete_ExistingReservation_Returns204()
+    {
+        var client = CreateClient();
+        var tomorrow = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var id = await CreateReservation(client, "Burek", tomorrow, tomorrow.AddDays(1));
+
+        var response = await client.DeleteAsync($"/api/reservations/{id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_MissingReservation_Returns404()
+    {
+        var client = CreateClient();
+
+        var response = await client.DeleteAsync("/api/reservations/999");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_RemovesReservationFromList()
+    {
+        var client = CreateClient();
+        var tomorrow = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var id = await CreateReservation(client, "Burek", tomorrow, tomorrow.AddDays(1));
+
+        await client.DeleteAsync($"/api/reservations/{id}");
+        var response = await client.GetAsync("/api/reservations");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var list = await response.Content.ReadFromJsonAsync<JsonElement[]>();
+        Assert.NotNull(list);
+        Assert.DoesNotContain(list, r => r.GetProperty("id").GetInt32() == id);
     }
 }
