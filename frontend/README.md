@@ -1,42 +1,43 @@
-# sv
+# Kennel frontend
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+SvelteKit SPA for the kennel reservation form. The app talks to the backend API at `http://localhost:5174/api/reservations`.
 
-## Creating a project
+## Development
 
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
+Install dependencies:
 
 ```sh
-# recreate this project
-npx sv@0.15.2 create --template minimal --types ts --install npm frontend
+npm install
 ```
 
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Start the frontend dev server:
 
 ```sh
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
-
-To create a production version of your app:
+Open `http://localhost:5173`. For the form to work, also run the backend from `../backend`:
 
 ```sh
-npm run build
+dotnet run
 ```
 
-You can preview the production build with `npm run preview`.
+## Tests
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Run component tests:
+
+```sh
+npm test
+```
+
+Run type and Svelte checks:
+
+```sh
+npm run check
+```
+
+Run the Playwright happy path test:
+
+```sh
+npm run test:e2e
+```
