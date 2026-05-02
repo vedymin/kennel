@@ -12,7 +12,7 @@ test('empty reservation list shows empty state', async ({ page }) => {
 
 	await page.goto('/');
 
-	await expect(page.getByText('Brak rezerwacji. Dodaj pierwsza powyzej.')).toBeVisible();
+	await expect(page.getByText('Brak rezerwacji. Dodaj pierwszą powyżej.')).toBeVisible();
 });
 
 test('user can add a reservation and see it in the list', async ({ page }) => {

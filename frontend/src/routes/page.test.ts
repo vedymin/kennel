@@ -159,7 +159,7 @@ describe('Reservation list', () => {
 
 		render(Page);
 
-		expect(screen.getByText('Ladowanie...')).toBeInTheDocument();
+		expect(screen.getByText('Ładowanie...')).toBeInTheDocument();
 	});
 
 	it('shows empty state when there are no reservations', async () => {
@@ -170,7 +170,7 @@ describe('Reservation list', () => {
 
 		render(Page);
 
-		expect(await screen.findByText('Brak rezerwacji. Dodaj pierwsza powyzej.')).toBeInTheDocument();
+		expect(await screen.findByText('Brak rezerwacji. Dodaj pierwszą powyżej.')).toBeInTheDocument();
 	});
 
 	it('shows fetch error and retries when requested', async () => {
@@ -182,12 +182,12 @@ describe('Reservation list', () => {
 
 		render(Page);
 
-		expect(await screen.findByText('Nie udalo sie pobrac rezerwacji.')).toBeInTheDocument();
-		await user.click(screen.getByRole('button', { name: 'Sprobuj ponownie' }));
+		expect(await screen.findByText('Nie udało się pobrać rezerwacji.')).toBeInTheDocument();
+		await user.click(screen.getByRole('button', { name: 'Spróbuj ponownie' }));
 
 		await waitFor(() => {
 			expect(fetch).toHaveBeenCalledTimes(2);
-			expect(screen.getByText('Brak rezerwacji. Dodaj pierwsza powyzej.')).toBeInTheDocument();
+			expect(screen.getByText('Brak rezerwacji. Dodaj pierwszą powyżej.')).toBeInTheDocument();
 		});
 	});
 
@@ -226,7 +226,7 @@ describe('Reservation list', () => {
 
 		render(Page);
 
-		const row = await screen.findByRole('row', { name: /Senior 2026-04-20 2026-04-21 zakonczona/i });
+		const row = await screen.findByRole('row', { name: /Senior 2026-04-20 2026-04-21 zakończona/i });
 		expect(row).toHaveClass('opacity-50');
 	});
 });
