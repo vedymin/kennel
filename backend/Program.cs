@@ -71,6 +71,19 @@ app.MapGet("/api/reservations", async (KennelDb db) =>
     return Results.Ok(reservations);
 });
 
+app.MapDelete("/api/reservations/{id:int}", async (int id, KennelDb db) =>
+{
+    var reservation = await db.Reservations.FindAsync(id);
+
+    if (reservation is null)
+        return Results.NotFound();
+
+    db.Reservations.Remove(reservation);
+    await db.SaveChangesAsync();
+
+    return Results.NoContent();
+});
+
 app.Run();
 
 public class KennelDb(DbContextOptions<KennelDb> options) : DbContext(options)
