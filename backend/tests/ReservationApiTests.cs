@@ -260,6 +260,25 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task Delete_PastReservation_Returns204()
+    {
+        var client = CreateClient();
+        var pastStart = DateOnly.FromDateTime(DateTime.Today.AddDays(-5));
+        var pastEnd = DateOnly.FromDateTime(DateTime.Today.AddDays(-3));
+        await SeedReservation("Senior", pastStart, pastEnd);
+
+        var list = await client.GetFromJsonAsync<JsonElement[]>("/api/reservations");
+        var id = list![0].GetProperty("id").GetInt32();
+
+        var response = await client.DeleteAsync($"/api/reservations/{id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var afterDelete = await client.GetFromJsonAsync<JsonElement[]>("/api/reservations");
+        Assert.Empty(afterDelete!);
+    }
+
+    [Fact]
     public async Task Delete_MissingReservation_Returns404()
     {
         var client = CreateClient();

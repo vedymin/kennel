@@ -19,6 +19,7 @@
 	let fetchError = $state(false);
 	let reservationToDelete = $state<Reservation | null>(null);
 	let deleting = $state(false);
+	let deleteError = $state('');
 
 	const canSubmit = $derived(dogName.trim() !== '' && startDate !== '' && endDate !== '');
 
@@ -73,6 +74,7 @@
 
 	function requestDelete(reservation: Reservation) {
 		reservationToDelete = reservation;
+		deleteError = '';
 	}
 
 	function cancelDelete() {
@@ -84,11 +86,14 @@
 		if (!reservationToDelete || deleting) return;
 
 		deleting = true;
+		deleteError = '';
 		try {
 			const res = await fetch(`${API}/${reservationToDelete.id}`, { method: 'DELETE' });
-			if (res.ok) {
+			if (res.ok || res.status === 404) {
 				reservationToDelete = null;
 				await loadReservations();
+			} else {
+				deleteError = 'Nie udało się usunąć rezerwacji. Spróbuj ponownie.';
 			}
 		} finally {
 			deleting = false;
@@ -213,6 +218,9 @@
 				<p class="mb-6">
 					Czy na pewno usunąć rezerwację dla {reservationToDelete.dogName}?
 				</p>
+				{#if deleteError}
+					<p class="mb-4 text-sm text-red-700" aria-live="polite">{deleteError}</p>
+				{/if}
 				<div class="flex justify-end gap-3">
 					<button
 						type="button"
