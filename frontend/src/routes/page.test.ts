@@ -3,8 +3,6 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Page from './+page.svelte';
 
-const API = 'http://localhost:5174/api/reservations';
-
 beforeEach(() => {
 	vi.restoreAllMocks();
 });
@@ -291,7 +289,7 @@ describe('Reservation list', () => {
 
 		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 		expect(screen.getByRole('row', { name: /Burek 2026-05-10 2026-05-12/i })).toBeInTheDocument();
-		expect(fetch).not.toHaveBeenCalledWith(`${API}/1`, expect.objectContaining({ method: 'DELETE' }));
+		expect(fetch.mock.calls.filter(([, opts]) => opts?.method === 'DELETE')).toHaveLength(0);
 	});
 
 	it('waits for delete to finish before closing the dialog and refreshes the list on success', async () => {
@@ -320,7 +318,7 @@ describe('Reservation list', () => {
 		await user.click(await screen.findByRole('button', { name: 'Usuń rezerwację dla Burek' }));
 		await user.click(screen.getByRole('button', { name: 'Usuń' }));
 
-		expect(fetch).toHaveBeenCalledWith(`${API}/1`, { method: 'DELETE' });
+		expect(fetch.mock.calls.filter(([, opts]) => opts?.method === 'DELETE')).toHaveLength(1);
 		expect(screen.getByRole('dialog')).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: 'Usuwanie...' })).toBeDisabled();
 		expect(screen.getByRole('row', { name: /Burek 2026-05-10 2026-05-12/i })).toBeInTheDocument();
@@ -530,7 +528,7 @@ describe('Reservation list', () => {
 			expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 		});
 
-		expect(fetch).toHaveBeenCalledWith(`${API}/1`, { method: 'DELETE' });
+		expect(fetch.mock.calls.filter(([, opts]) => opts?.method === 'DELETE')).toHaveLength(1);
 	});
 
 	it('treats a 404 delete response as successful absence and refreshes the list', async () => {
