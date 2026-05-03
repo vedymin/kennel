@@ -107,6 +107,49 @@ test('deleting the last reservation shows empty state', async ({ page }) => {
 	await expect(page.getByText('Brak rezerwacji. Dodaj pierwszą powyżej.')).toBeVisible();
 });
 
+test('hide past reservations checkbox filters out ended reservations', async ({ page }) => {
+	const past = {
+		id: 1,
+		dogName: 'Stary',
+		startDate: '2025-01-01',
+		endDate: '2025-01-05',
+		createdAt: '2024-12-31T10:00:00Z'
+	};
+	const future = {
+		id: 2,
+		dogName: 'Młody',
+		startDate: '2026-06-01',
+		endDate: '2026-06-05',
+		createdAt: '2026-05-01T10:00:00Z'
+	};
+
+	await page.route('http://localhost:5174/api/reservations', async (route) => {
+		if (route.request().method() === 'GET') {
+			await route.fulfill({ json: [past, future] });
+			return;
+		}
+		await route.fallback();
+	});
+
+	await page.goto('/');
+
+	const pastRow = page.getByRole('row', { name: /Stary/ });
+	const futureRow = page.getByRole('row', { name: /Młody/ });
+
+	await expect(pastRow).toBeVisible();
+	await expect(futureRow).toBeVisible();
+
+	await page.getByLabel('Ukryj minione rezerwacje').check();
+
+	await expect(pastRow).toBeHidden();
+	await expect(futureRow).toBeVisible();
+
+	await page.getByLabel('Ukryj minione rezerwacje').uncheck();
+
+	await expect(pastRow).toBeVisible();
+	await expect(futureRow).toBeVisible();
+});
+
 test('treats a 404 delete as successful absence', async ({ page }) => {
 	const reservation = {
 		id: 42,

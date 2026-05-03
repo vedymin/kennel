@@ -20,8 +20,10 @@
 	let reservationToDelete = $state<Reservation | null>(null);
 	let deleting = $state(false);
 	let deleteError = $state('');
+	let hidePast = $state(false);
 
 	const canSubmit = $derived(dogName.trim() !== '' && startDate !== '' && endDate !== '');
+	const visibleReservations = $derived(hidePast ? reservations.filter(r => !isPast(r)) : reservations);
 
 	async function loadReservations() {
 		loading = true;
@@ -167,9 +169,17 @@
 			<p>Nie udało się pobrać rezerwacji.</p>
 			<button onclick={loadReservations} class="text-blue-600 underline">Spróbuj ponownie</button>
 		</div>
-	{:else if reservations.length === 0}
-		<p class="text-gray-500">Brak rezerwacji. Dodaj pierwszą powyżej.</p>
 	{:else}
+		<label class="flex items-center gap-2 mb-4 cursor-pointer select-none">
+			<input type="checkbox" bind:checked={hidePast} class="cursor-pointer" />
+			Ukryj minione rezerwacje
+		</label>
+
+		{#if reservations.length === 0}
+			<p class="text-gray-500">Brak rezerwacji. Dodaj pierwszą powyżej.</p>
+		{:else if visibleReservations.length === 0}
+			<p class="text-gray-500">Wszystkie rezerwacje są zakończone.</p>
+		{:else}
 		<table class="w-full text-left border-collapse">
 			<thead>
 				<tr class="border-b">
@@ -180,7 +190,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each reservations as r (r.id)}
+				{#each visibleReservations as r (r.id)}
 					<tr class="border-b {isPast(r) ? 'opacity-50' : ''}">
 						<td class="py-2">{r.dogName}</td>
 						<td class="py-2">{r.startDate}</td>
@@ -202,6 +212,7 @@
 				{/each}
 			</tbody>
 		</table>
+		{/if}
 	{/if}
 
 	{#if reservationToDelete}
