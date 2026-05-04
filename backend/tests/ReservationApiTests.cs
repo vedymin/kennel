@@ -39,7 +39,10 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
 
     private HttpClient CreateClient() => _factory.CreateClient();
 
-    private static async Task<int> CreateReservation(HttpClient client, string dogName, DateOnly startDate, DateOnly endDate)
+    private static JsonElement[] GetItems(JsonElement body) =>
+        body.GetProperty("items").EnumerateArray().ToArray();
+
+    private static async Task<string> CreateReservation(HttpClient client, string dogName, DateOnly startDate, DateOnly endDate)
     {
         var response = await client.PostAsJsonAsync("/api/reservations", new
         {
@@ -49,7 +52,7 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         });
         var created = await response.Content.ReadFromJsonAsync<JsonElement>();
 
-        return created.GetProperty("id").GetInt32();
+        return created.GetProperty("id").GetString()!;
     }
 
     private async Task SeedReservation(string dogName, DateOnly startDate, DateOnly endDate)
@@ -87,8 +90,12 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal("Burek", body.GetProperty("dogName").GetString());
         Assert.Equal(tomorrow.ToString("yyyy-MM-dd"), body.GetProperty("startDate").GetString());
         Assert.Equal(dayAfter.ToString("yyyy-MM-dd"), body.GetProperty("endDate").GetString());
-        Assert.True(body.GetProperty("id").GetInt32() > 0);
-        Assert.True(body.TryGetProperty("createdAt", out _));
+        var id = body.GetProperty("id").GetString();
+        Assert.StartsWith("local:", id);
+        Assert.EndsWith($"/api/reservations/{id}", response.Headers.Location!.ToString());
+        Assert.Equal("local", body.GetProperty("source").GetString());
+        Assert.True(body.GetProperty("canDelete").GetBoolean());
+        Assert.False(string.IsNullOrEmpty(body.GetProperty("createdAt").GetString()));
     }
 
     [Fact]
@@ -211,24 +218,28 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         var response = await client.GetAsync("/api/reservations");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var list = await response.Content.ReadFromJsonAsync<JsonElement[]>();
-        Assert.NotNull(list);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var list = GetItems(body);
         Assert.True(list.Length >= 2);
         Assert.Equal("Burek", list[0].GetProperty("dogName").GetString());
         Assert.Equal("Azor", list[1].GetProperty("dogName").GetString());
+        Assert.StartsWith("local:", list[0].GetProperty("id").GetString());
+        Assert.Equal("local", list[0].GetProperty("source").GetString());
+        Assert.True(list[0].GetProperty("canDelete").GetBoolean());
+        Assert.False(string.IsNullOrEmpty(list[0].GetProperty("createdAt").GetString()));
     }
 
     [Fact]
-    public async Task Get_WhenNoReservations_ReturnsEmptyList()
+    public async Task Get_WhenNoReservations_ReturnsEmptyAggregate()
     {
         var client = CreateClient();
 
         var response = await client.GetAsync("/api/reservations");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var list = await response.Content.ReadFromJsonAsync<JsonElement[]>();
-        Assert.NotNull(list);
-        Assert.Empty(list);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Empty(GetItems(body));
+        Assert.Equal("ok", body.GetProperty("sources").GetProperty("local").GetProperty("status").GetString());
     }
 
     [Fact]
@@ -242,8 +253,8 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         var response = await client.GetAsync("/api/reservations");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var list = await response.Content.ReadFromJsonAsync<JsonElement[]>();
-        Assert.NotNull(list);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var list = GetItems(body);
         Assert.Contains(list, r => r.GetProperty("dogName").GetString() == "Senior");
     }
 
@@ -267,15 +278,15 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         var pastEnd = DateOnly.FromDateTime(DateTime.Today.AddDays(-3));
         await SeedReservation("Senior", pastStart, pastEnd);
 
-        var list = await client.GetFromJsonAsync<JsonElement[]>("/api/reservations");
-        var id = list![0].GetProperty("id").GetInt32();
+        var body = await client.GetFromJsonAsync<JsonElement>("/api/reservations");
+        var id = GetItems(body)[0].GetProperty("id").GetString();
 
         var response = await client.DeleteAsync($"/api/reservations/{id}");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
-        var afterDelete = await client.GetFromJsonAsync<JsonElement[]>("/api/reservations");
-        Assert.Empty(afterDelete!);
+        var afterDelete = await client.GetFromJsonAsync<JsonElement>("/api/reservations");
+        Assert.Empty(GetItems(afterDelete));
     }
 
     [Fact]
@@ -299,8 +310,8 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         var response = await client.GetAsync("/api/reservations");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var list = await response.Content.ReadFromJsonAsync<JsonElement[]>();
-        Assert.NotNull(list);
-        Assert.DoesNotContain(list, r => r.GetProperty("id").GetInt32() == id);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var list = GetItems(body);
+        Assert.DoesNotContain(list, r => r.GetProperty("id").GetString() == id);
     }
 }

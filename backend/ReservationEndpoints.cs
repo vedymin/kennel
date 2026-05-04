@@ -35,7 +35,7 @@ public static class ReservationEndpoints
             await db.SaveChangesAsync();
 
             var response = new ReservationResponse(reservation);
-            return Results.Created($"/api/reservations/{reservation.Id}", response);
+            return Results.Created($"/api/reservations/{response.Id}", response);
         });
 
         app.MapGet("/api/reservations", async (KennelDb db) =>
@@ -45,12 +45,17 @@ public static class ReservationEndpoints
                 .Select(r => new ReservationResponse(r))
                 .ToListAsync();
 
-            return Results.Ok(reservations);
+            return Results.Ok(new ReservationListResponse(
+                reservations,
+                new ReservationSources(new SourceStatus("ok"))));
         });
 
-        app.MapDelete("/api/reservations/{id:int}", async (int id, KennelDb db) =>
+        app.MapDelete("/api/reservations/{id}", async (string id, KennelDb db) =>
         {
-            var reservation = await db.Reservations.FindAsync(id);
+            if (!TryParseLocalReservationId(id, out var localId))
+                return Results.NotFound();
+
+            var reservation = await db.Reservations.FindAsync(localId);
 
             if (reservation is null)
                 return Results.NotFound();
@@ -62,5 +67,14 @@ public static class ReservationEndpoints
         });
 
         return app;
+    }
+
+    private static bool TryParseLocalReservationId(string publicId, out int localId)
+    {
+        const string prefix = "local:";
+        localId = 0;
+
+        return publicId.StartsWith(prefix, StringComparison.Ordinal)
+            && int.TryParse(publicId[prefix.Length..], out localId);
     }
 }
