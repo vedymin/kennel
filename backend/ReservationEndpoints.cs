@@ -38,16 +38,24 @@ public static class ReservationEndpoints
             return Results.Created($"/api/reservations/{response.Id}", response);
         });
 
-        app.MapGet("/api/reservations", async (KennelDb db) =>
+        app.MapGet("/api/reservations", async (KennelDb db, IGoogleCalendarReservationSource googleSource) =>
         {
-            var reservations = await db.Reservations
+            var localReservations = await db.Reservations
                 .OrderBy(r => r.StartDate)
                 .Select(r => new ReservationResponse(r))
                 .ToListAsync();
+            var googleReservations = await googleSource.GetReservationsAsync();
+            var reservations = localReservations
+                .Concat(googleReservations.Items)
+                .OrderBy(r => r.StartDate, StringComparer.Ordinal)
+                .ThenBy(r => r.EndDate, StringComparer.Ordinal)
+                .ThenBy(r => r.DogName, StringComparer.CurrentCulture)
+                .ThenBy(r => r.Source, StringComparer.Ordinal)
+                .ToList();
 
             return Results.Ok(new ReservationListResponse(
                 reservations,
-                new ReservationSources(new SourceStatus("ok"))));
+                new ReservationSources(new SourceStatus("ok"), googleReservations.Status)));
         });
 
         app.MapDelete("/api/reservations/{id}", async (string id, KennelDb db) =>

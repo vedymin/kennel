@@ -2,7 +2,7 @@ public record CreateReservationRequest(string DogName, DateOnly StartDate, DateO
 
 public record ReservationListResponse(IReadOnlyList<ReservationResponse> Items, ReservationSources Sources);
 
-public record ReservationSources(SourceStatus Local);
+public record ReservationSources(SourceStatus Local, SourceStatus Google);
 
 public record SourceStatus(string Status);
 
