@@ -1,13 +1,10 @@
 <script lang="ts">
-	const API = 'http://localhost:5174/api/reservations';
-
-	interface Reservation {
-		id: number;
-		dogName: string;
-		startDate: string;
-		endDate: string;
-		createdAt: string;
-	}
+	import {
+		createReservation,
+		deleteReservation,
+		listReservations,
+		type Reservation
+	} from '$lib/reservations';
 
 	let dogName = $state('');
 	let startDate = $state('');
@@ -26,45 +23,31 @@
 	async function loadReservations() {
 		loading = true;
 		fetchError = false;
-		try {
-			const res = await fetch(API);
-			if (res.ok) {
-				reservations = await res.json();
-			} else {
-				fetchError = true;
-			}
-		} catch {
+		const result = await listReservations();
+		if (result.ok) {
+			reservations = result.reservations;
+		} else {
 			fetchError = true;
-		} finally {
-			loading = false;
 		}
+		loading = false;
 	}
 
 	async function handleSubmit() {
 		submitting = true;
 		errors = {};
 
-		try {
-			const res = await fetch(API, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ dogName, startDate, endDate })
-			});
-
-			if (res.ok) {
-				dogName = '';
-				startDate = '';
-				endDate = '';
-				await loadReservations();
-			} else if (res.status === 400) {
-				const data = await res.json();
-				errors = data.errors ?? {};
-			}
-		} catch {
+		const result = await createReservation({ dogName, startDate, endDate });
+		if (result.ok) {
+			dogName = '';
+			startDate = '';
+			endDate = '';
+			await loadReservations();
+		} else if (result.errors) {
+			errors = result.errors;
+		} else {
 			errors = { _form: 'Nie udało się wysłać formularza.' };
-		} finally {
-			submitting = false;
 		}
+		submitting = false;
 	}
 
 	function isPast(reservation: Reservation): boolean {
@@ -87,17 +70,14 @@
 
 		deleting = true;
 		deleteError = '';
-		try {
-			const res = await fetch(`${API}/${reservationToDelete.id}`, { method: 'DELETE' });
-			if (res.ok || res.status === 404) {
-				reservationToDelete = null;
-				await loadReservations();
-			} else {
-				deleteError = 'Nie udało się usunąć rezerwacji. Spróbuj ponownie.';
-			}
-		} finally {
-			deleting = false;
+		const result = await deleteReservation(reservationToDelete.id);
+		if (result.ok) {
+			reservationToDelete = null;
+			await loadReservations();
+		} else {
+			deleteError = 'Nie udało się usunąć rezerwacji. Spróbuj ponownie.';
 		}
+		deleting = false;
 	}
 
 	$effect(() => {
