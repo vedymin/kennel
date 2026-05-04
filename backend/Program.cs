@@ -11,6 +11,8 @@ builder.Services.AddCors(options =>
             .AllowAnyHeader()
             .AllowAnyMethod());
 });
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton<IGoogleOAuthService, GoogleOAuthService>();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -28,6 +30,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors("FrontendDev");
 
 app.MapReservationEndpoints();
+app.MapGoogleOAuthEndpoints();
 
 app.Run();
 
