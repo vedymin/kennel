@@ -18,6 +18,57 @@ test('empty reservation list shows empty state', async ({ page }) => {
 	await page.goto('/');
 
 	await expect(page.getByText('Brak rezerwacji. Dodaj pierwszą powyżej.')).toBeVisible();
+	await expect(page.getByRole('status')).toHaveCount(0);
+});
+
+test('reservation list shows source and hides delete when deletion is not allowed', async ({ page }) => {
+	const reservation = {
+		id: 'google:1',
+		source: 'google',
+		dogName: 'Figa',
+		startDate: '2026-06-10',
+		endDate: '2026-06-12',
+		createdAt: null,
+		canDelete: false
+	};
+
+	await page.route('http://localhost:5174/api/reservations', async (route) => {
+		if (route.request().method() === 'GET') {
+			await route.fulfill({ json: listResponse([reservation]) });
+			return;
+		}
+
+		await route.fallback();
+	});
+
+	await page.goto('/');
+
+	await expect(page.getByRole('columnheader', { name: 'Źródło' })).toBeVisible();
+	await expect(page.getByRole('row', { name: /Figa 2026-06-10 2026-06-12 Google/i })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Usuń rezerwację dla Figa' })).toHaveCount(0);
+});
+
+test('source health banner appears when a source is not healthy', async ({ page }) => {
+	await page.route('http://localhost:5174/api/reservations', async (route) => {
+		if (route.request().method() === 'GET') {
+			await route.fulfill({
+				json: {
+					items: [],
+					sources: {
+						local: { status: 'ok' },
+						google: { status: 'offline' }
+					}
+				}
+			});
+			return;
+		}
+
+		await route.fallback();
+	});
+
+	await page.goto('/');
+
+	await expect(page.getByRole('status')).toHaveText('Źródło Google ma status offline.');
 });
 
 test('user can add a reservation and see it in the list', async ({ page }) => {

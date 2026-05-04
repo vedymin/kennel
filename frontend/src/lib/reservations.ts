@@ -10,9 +10,7 @@ export interface Reservation {
 	canDelete: boolean;
 }
 
-export interface ReservationSources {
-	local: { status: string };
-}
+export type ReservationSources = Record<string, { status: string }>;
 
 export type ListReservationsResult =
 	| { ok: true; reservations: Reservation[]; sources: ReservationSources }
