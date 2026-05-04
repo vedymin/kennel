@@ -3,7 +3,8 @@
 		createReservation,
 		deleteReservation,
 		listReservations,
-		type Reservation
+		type Reservation,
+		type ReservationSources
 	} from '$lib/reservations';
 
 	let dogName = $state('');
@@ -14,9 +15,13 @@
 	let reservations = $state<Reservation[]>([]);
 	let loading = $state(true);
 	let fetchError = $state(false);
+	let sources = $state<ReservationSources>({});
 	let reservationToDelete = $state<Reservation | null>(null);
 	let deleting = $state(false);
 	let deleteError = $state('');
+	let unhealthySources = $derived(
+		Object.entries(sources).filter(([, source]) => source.status !== 'ok')
+	);
 
 	const canSubmit = $derived(dogName.trim() !== '' && startDate !== '' && endDate !== '');
 
@@ -26,6 +31,7 @@
 		const result = await listReservations();
 		if (result.ok) {
 			reservations = result.reservations;
+			sources = result.sources;
 		} else {
 			fetchError = true;
 		}
@@ -53,6 +59,16 @@
 	function isPast(reservation: Reservation): boolean {
 		const today = new Date().toISOString().split('T')[0];
 		return reservation.endDate < today;
+	}
+
+	function sourceLabel(source: string): string {
+		if (source === 'local') return 'Lokalna';
+		if (source === 'google') return 'Google';
+		return source;
+	}
+
+	function sourceStatusMessage(source: string, status: string): string {
+		return `Źródło ${sourceLabel(source)} ma status ${status}.`;
 	}
 
 	function requestDelete(reservation: Reservation) {
@@ -140,6 +156,14 @@
 		{/if}
 	</div>
 
+	{#if unhealthySources.length > 0}
+		<div role="status" class="mb-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+			{#each unhealthySources as [source, health]}
+				<p>{sourceStatusMessage(source, health.status)}</p>
+			{/each}
+		</div>
+	{/if}
+
 	{#if loading}
 		<p>Ładowanie...</p>
 	{:else if fetchError}
@@ -156,6 +180,7 @@
 					<th class="py-2">Imię psa</th>
 					<th class="py-2">Od</th>
 					<th class="py-2">Do</th>
+					<th class="py-2">Źródło</th>
 					<th class="py-2">Akcje</th>
 				</tr>
 			</thead>
@@ -165,17 +190,20 @@
 						<td class="py-2">{r.dogName}</td>
 						<td class="py-2">{r.startDate}</td>
 						<td class="py-2">{r.endDate}</td>
+						<td class="py-2">{sourceLabel(r.source)}</td>
 						<td class="py-2">
 							<div class="flex items-center gap-3">
 								<span>{isPast(r) ? 'zakończona' : ''}</span>
-								<button
-									type="button"
-									aria-label={`Usuń rezerwację dla ${r.dogName}`}
-									onclick={() => requestDelete(r)}
-									class="text-red-700 underline"
-								>
-									Usuń
-								</button>
+								{#if r.canDelete}
+									<button
+										type="button"
+										aria-label={`Usuń rezerwację dla ${r.dogName}`}
+										onclick={() => requestDelete(r)}
+										class="text-red-700 underline"
+									>
+										Usuń
+									</button>
+								{/if}
 							</div>
 						</td>
 					</tr>

@@ -3,9 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Page from './+page.svelte';
 
-const listResponse = (items: unknown[] = []) => ({
+const listResponse = (
+	items: unknown[] = [],
+	sources: Record<string, { status: string }> = { local: { status: 'ok' } }
+) => ({
 	items,
-	sources: { local: { status: 'ok' } }
+	sources
 });
 
 const reservation = (overrides: Record<string, unknown> = {}) => ({
@@ -249,6 +252,18 @@ describe('Reservation list', () => {
 		expect(await screen.findByRole('row', { name: /Burek 2026-05-10 2026-05-12/i })).toBeInTheDocument();
 	});
 
+	it('shows the source column with a local source label', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve(listResponse([reservation()]))
+		}));
+
+		render(Page);
+
+		expect(await screen.findByRole('columnheader', { name: 'Źródło' })).toBeInTheDocument();
+		expect(screen.getByRole('row', { name: /Burek 2026-05-10 2026-05-12 Lokalna/i })).toBeInTheDocument();
+	});
+
 	it('opens a dog-specific delete confirmation dialog from a row action', async () => {
 		const user = userEvent.setup();
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -264,6 +279,46 @@ describe('Reservation list', () => {
 		expect(dialog).toHaveTextContent('Burek');
 		expect(screen.getByRole('button', { name: 'Anuluj' })).toBeInTheDocument();
 		expect(screen.getByRole('button', { name: 'Usuń' })).toBeInTheDocument();
+	});
+
+	it('hides the delete action when the reservation cannot be deleted', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve(listResponse([
+				reservation({ id: 'google:1', source: 'google', dogName: 'Figa', canDelete: false })
+			]))
+		}));
+
+		render(Page);
+
+		expect(await screen.findByRole('row', { name: /Figa 2026-05-10 2026-05-12 Google/i })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Usuń rezerwację dla Figa' })).not.toBeInTheDocument();
+	});
+
+	it('shows a banner when a source is not healthy', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve(listResponse([], {
+				local: { status: 'ok' },
+				google: { status: 'offline' }
+			}))
+		}));
+
+		render(Page);
+
+		expect(await screen.findByRole('status')).toHaveTextContent('Źródło Google ma status offline.');
+	});
+
+	it('does not show a source health banner when all sources are healthy', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve(listResponse())
+		}));
+
+		render(Page);
+
+		await screen.findByText('Brak rezerwacji. Dodaj pierwszą powyżej.');
+		expect(screen.queryByRole('status')).not.toBeInTheDocument();
 	});
 
 	it('cancels deletion without calling the delete endpoint or changing the list', async () => {
@@ -513,7 +568,7 @@ describe('Reservation list', () => {
 
 		render(Page);
 
-		const row = await screen.findByRole('row', { name: /Senior 2026-04-20 2026-04-21 zakończona/i });
+		const row = await screen.findByRole('row', { name: /Senior 2026-04-20 2026-04-21 Lokalna zakończona/i });
 		expect(row).toHaveClass('opacity-50');
 	});
 });
