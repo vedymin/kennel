@@ -5,21 +5,25 @@ describe('Reservation API adapter', () => {
 	it('returns reservations from the API', async () => {
 		const reservations = [
 			{
-				id: 1,
+				id: 'local:1',
+				source: 'local',
 				dogName: 'Burek',
 				startDate: '2026-05-10',
 				endDate: '2026-05-12',
-				createdAt: '2026-05-02T10:00:00Z'
+				createdAt: '2026-05-02T10:00:00Z',
+				canDelete: true
 			}
 		];
+		const sources = { local: { status: 'ok' } };
 		const fetcher = vi.fn().mockResolvedValue({
 			ok: true,
-			json: () => Promise.resolve(reservations)
+			json: () => Promise.resolve({ items: reservations, sources })
 		});
 
 		await expect(listReservations(fetcher)).resolves.toEqual({
 			ok: true,
-			reservations
+			reservations,
+			sources
 		});
 		expect(fetcher).toHaveBeenCalledWith('http://localhost:5174/api/reservations');
 	});
@@ -36,9 +40,23 @@ describe('Reservation API adapter', () => {
 			startDate: '2026-05-10',
 			endDate: '2026-05-12'
 		};
-		const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 201 }));
+		const reservation = {
+			id: 'local:1',
+			source: 'local',
+			dogName: 'Burek',
+			startDate: '2026-05-10',
+			endDate: '2026-05-12',
+			createdAt: '2026-05-02T10:00:00Z',
+			canDelete: true
+		};
+		const fetcher = vi.fn().mockResolvedValue(
+			new Response(JSON.stringify(reservation), {
+				status: 201,
+				headers: { 'Content-Type': 'application/json' }
+			})
+		);
 
-		await expect(createReservation(request, fetcher)).resolves.toEqual({ ok: true });
+		await expect(createReservation(request, fetcher)).resolves.toEqual({ ok: true, reservation });
 		expect(fetcher).toHaveBeenCalledWith('http://localhost:5174/api/reservations', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -71,8 +89,8 @@ describe('Reservation API adapter', () => {
 	it('deletes a reservation through the API', async () => {
 		const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 
-		await expect(deleteReservation(7, fetcher)).resolves.toEqual({ ok: true });
-		expect(fetcher).toHaveBeenCalledWith('http://localhost:5174/api/reservations/7', {
+		await expect(deleteReservation('local:7', fetcher)).resolves.toEqual({ ok: true });
+		expect(fetcher).toHaveBeenCalledWith('http://localhost:5174/api/reservations/local:7', {
 			method: 'DELETE'
 		});
 	});
@@ -80,12 +98,12 @@ describe('Reservation API adapter', () => {
 	it('treats a missing reservation as successfully absent', async () => {
 		const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
 
-		await expect(deleteReservation(7, fetcher)).resolves.toEqual({ ok: true });
+		await expect(deleteReservation('local:7', fetcher)).resolves.toEqual({ ok: true });
 	});
 
 	it('returns a failed result when deletion cannot reach the API', async () => {
 		const fetcher = vi.fn().mockRejectedValue(new Error('network down'));
 
-		await expect(deleteReservation(7, fetcher)).resolves.toEqual({ ok: false });
+		await expect(deleteReservation('local:7', fetcher)).resolves.toEqual({ ok: false });
 	});
 });

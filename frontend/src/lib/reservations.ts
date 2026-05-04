@@ -1,15 +1,21 @@
 const RESERVATIONS_API = 'http://localhost:5174/api/reservations';
 
 export interface Reservation {
-	id: number;
+	id: string;
+	source: string;
 	dogName: string;
 	startDate: string;
 	endDate: string;
-	createdAt: string;
+	createdAt: string | null;
+	canDelete: boolean;
+}
+
+export interface ReservationSources {
+	local: { status: string };
 }
 
 export type ListReservationsResult =
-	| { ok: true; reservations: Reservation[] }
+	| { ok: true; reservations: Reservation[]; sources: ReservationSources }
 	| { ok: false };
 
 export interface CreateReservationRequest {
@@ -19,7 +25,7 @@ export interface CreateReservationRequest {
 }
 
 export type CreateReservationResult =
-	| { ok: true }
+	| { ok: true; reservation: Reservation }
 	| { ok: false; errors?: Record<string, string> };
 
 export type DeleteReservationResult =
@@ -34,9 +40,12 @@ export async function listReservations(fetcher: typeof fetch = fetch): Promise<L
 			return { ok: false };
 		}
 
+		const body = await response.json();
+
 		return {
 			ok: true,
-			reservations: await response.json()
+			reservations: body.items,
+			sources: body.sources
 		};
 	} catch {
 		return { ok: false };
@@ -44,7 +53,7 @@ export async function listReservations(fetcher: typeof fetch = fetch): Promise<L
 }
 
 export async function deleteReservation(
-	id: number,
+	id: string,
 	fetcher: typeof fetch = fetch
 ): Promise<DeleteReservationResult> {
 	try {
@@ -68,7 +77,7 @@ export async function createReservation(
 		});
 
 		if (response.ok) {
-			return { ok: true };
+			return { ok: true, reservation: await response.json() };
 		}
 
 		if (response.status === 400) {

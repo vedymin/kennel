@@ -3,6 +3,22 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Page from './+page.svelte';
 
+const listResponse = (items: unknown[] = []) => ({
+	items,
+	sources: { local: { status: 'ok' } }
+});
+
+const reservation = (overrides: Record<string, unknown> = {}) => ({
+	id: 'local:1',
+	source: 'local',
+	dogName: 'Burek',
+	startDate: '2026-05-10',
+	endDate: '2026-05-12',
+	createdAt: '2026-05-02T10:00:00Z',
+	canDelete: true,
+	...overrides
+});
+
 beforeEach(() => {
 	vi.restoreAllMocks();
 });
@@ -11,7 +27,7 @@ describe('Reservation form', () => {
 	it('disables submit button when any field is empty', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
 			ok: true,
-			json: () => Promise.resolve([])
+			json: () => Promise.resolve(listResponse())
 		}));
 
 		render(Page);
@@ -26,7 +42,7 @@ describe('Reservation form', () => {
 
 		vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, opts?: RequestInit) => {
 			if (opts?.method === 'POST') return postPromise;
-			return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+			return Promise.resolve({ ok: true, json: () => Promise.resolve(listResponse()) });
 		}));
 
 		render(Page);
@@ -47,7 +63,7 @@ describe('Reservation form', () => {
 		expect(button).toHaveTextContent(/dodawanie/i);
 		expect(button).toBeDisabled();
 
-		resolvePost!(new Response(JSON.stringify({ id: 1, dogName: 'Burek', startDate: tomorrow, endDate: dayAfter, createdAt: new Date().toISOString() }), {
+		resolvePost!(new Response(JSON.stringify(reservation({ startDate: tomorrow, endDate: dayAfter, createdAt: new Date().toISOString() })), {
 			status: 201,
 			headers: { 'Content-Type': 'application/json' }
 		}));
@@ -64,7 +80,7 @@ describe('Reservation form', () => {
 					json: () => Promise.resolve({ errors: { dogName: 'Imię psa jest wymagane.' } })
 				});
 			}
-			return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+			return Promise.resolve({ ok: true, json: () => Promise.resolve(listResponse()) });
 		}));
 
 		render(Page);
@@ -97,7 +113,7 @@ describe('Reservation form', () => {
 					json: () => Promise.resolve({ errors: { dogName: 'ImiÄ™ psa jest wymagane.' } })
 				});
 			}
-			return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+			return Promise.resolve({ ok: true, json: () => Promise.resolve(listResponse()) });
 		}));
 
 		render(Page);
@@ -129,10 +145,10 @@ describe('Reservation form', () => {
 				return Promise.resolve({
 					ok: true,
 					status: 201,
-					json: () => Promise.resolve({ id: 1, dogName: 'Burek', startDate: tomorrow, endDate: dayAfter, createdAt: new Date().toISOString() })
+					json: () => Promise.resolve(reservation({ startDate: tomorrow, endDate: dayAfter, createdAt: new Date().toISOString() }))
 				});
 			}
-			return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+			return Promise.resolve({ ok: true, json: () => Promise.resolve(listResponse()) });
 		}));
 
 		render(Page);
@@ -158,17 +174,17 @@ describe('Reservation form', () => {
 		const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 		const dayAfter = new Date(Date.now() + 172800000).toISOString().split('T')[0];
 		const fetch = vi.fn()
-			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(listResponse()) })
 			.mockResolvedValueOnce({
 				ok: true,
 				status: 201,
-				json: () => Promise.resolve({ id: 1, dogName: 'Burek', startDate: tomorrow, endDate: dayAfter, createdAt: new Date().toISOString() })
+				json: () => Promise.resolve(reservation({ startDate: tomorrow, endDate: dayAfter, createdAt: new Date().toISOString() }))
 			})
 			.mockResolvedValueOnce({
 				ok: true,
-				json: () => Promise.resolve([
-					{ id: 1, dogName: 'Burek', startDate: tomorrow, endDate: dayAfter, createdAt: new Date().toISOString() }
-				])
+				json: () => Promise.resolve(listResponse([
+					reservation({ startDate: tomorrow, endDate: dayAfter, createdAt: new Date().toISOString() })
+				]))
 			});
 		vi.stubGlobal('fetch', fetch);
 
@@ -196,7 +212,7 @@ describe('Reservation list', () => {
 	it('shows empty state when there are no reservations', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
 			ok: true,
-			json: () => Promise.resolve([])
+			json: () => Promise.resolve(listResponse())
 		}));
 
 		render(Page);
@@ -208,7 +224,7 @@ describe('Reservation list', () => {
 		const user = userEvent.setup();
 		const fetch = vi.fn()
 			.mockResolvedValueOnce({ ok: false })
-			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) });
+			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(listResponse()) });
 		vi.stubGlobal('fetch', fetch);
 
 		render(Page);
@@ -225,15 +241,7 @@ describe('Reservation list', () => {
 	it('renders populated reservations', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
 			ok: true,
-			json: () => Promise.resolve([
-				{
-					id: 1,
-					dogName: 'Burek',
-					startDate: '2026-05-10',
-					endDate: '2026-05-12',
-					createdAt: '2026-05-02T10:00:00Z'
-				}
-			])
+			json: () => Promise.resolve(listResponse([reservation()]))
 		}));
 
 		render(Page);
@@ -245,15 +253,7 @@ describe('Reservation list', () => {
 		const user = userEvent.setup();
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
 			ok: true,
-			json: () => Promise.resolve([
-				{
-					id: 1,
-					dogName: 'Burek',
-					startDate: '2026-05-10',
-					endDate: '2026-05-12',
-					createdAt: '2026-05-02T10:00:00Z'
-				}
-			])
+			json: () => Promise.resolve(listResponse([reservation()]))
 		}));
 
 		render(Page);
@@ -270,15 +270,7 @@ describe('Reservation list', () => {
 		const user = userEvent.setup();
 		const fetch = vi.fn().mockResolvedValue({
 			ok: true,
-			json: () => Promise.resolve([
-				{
-					id: 1,
-					dogName: 'Burek',
-					startDate: '2026-05-10',
-					endDate: '2026-05-12',
-					createdAt: '2026-05-02T10:00:00Z'
-				}
-			])
+			json: () => Promise.resolve(listResponse([reservation()]))
 		});
 		vi.stubGlobal('fetch', fetch);
 
@@ -299,18 +291,10 @@ describe('Reservation list', () => {
 		const fetch = vi.fn()
 			.mockResolvedValueOnce({
 				ok: true,
-				json: () => Promise.resolve([
-					{
-						id: 1,
-						dogName: 'Burek',
-						startDate: '2026-05-10',
-						endDate: '2026-05-12',
-						createdAt: '2026-05-02T10:00:00Z'
-					}
-				])
+				json: () => Promise.resolve(listResponse([reservation()]))
 			})
 			.mockImplementationOnce(() => deletePromise)
-			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) });
+			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(listResponse()) });
 		vi.stubGlobal('fetch', fetch);
 
 		render(Page);
@@ -337,15 +321,7 @@ describe('Reservation list', () => {
 		const fetch = vi.fn()
 			.mockResolvedValueOnce({
 				ok: true,
-				json: () => Promise.resolve([
-					{
-						id: 1,
-						dogName: 'Burek',
-						startDate: '2026-05-10',
-						endDate: '2026-05-12',
-						createdAt: '2026-05-02T10:00:00Z'
-					}
-				])
+				json: () => Promise.resolve(listResponse([reservation()]))
 			})
 			.mockResolvedValueOnce(new Response(null, { status: 500 }));
 		vi.stubGlobal('fetch', fetch);
@@ -367,19 +343,11 @@ describe('Reservation list', () => {
 		const fetch = vi.fn()
 			.mockResolvedValueOnce({
 				ok: true,
-				json: () => Promise.resolve([
-					{
-						id: 1,
-						dogName: 'Burek',
-						startDate: '2026-05-10',
-						endDate: '2026-05-12',
-						createdAt: '2026-05-02T10:00:00Z'
-					}
-				])
+				json: () => Promise.resolve(listResponse([reservation()]))
 			})
 			.mockResolvedValueOnce(new Response(null, { status: 500 }))
 			.mockResolvedValueOnce(new Response(null, { status: 204 }))
-			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) });
+			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(listResponse()) });
 		vi.stubGlobal('fetch', fetch);
 
 		render(Page);
@@ -405,15 +373,7 @@ describe('Reservation list', () => {
 		const fetch = vi.fn()
 			.mockResolvedValueOnce({
 				ok: true,
-				json: () => Promise.resolve([
-					{
-						id: 1,
-						dogName: 'Burek',
-						startDate: '2026-05-10',
-						endDate: '2026-05-12',
-						createdAt: '2026-05-02T10:00:00Z'
-					}
-				])
+				json: () => Promise.resolve(listResponse([reservation()]))
 			})
 			.mockResolvedValueOnce(new Response(null, { status: 500 }));
 		vi.stubGlobal('fetch', fetch);
@@ -439,15 +399,7 @@ describe('Reservation list', () => {
 		const fetch = vi.fn()
 			.mockResolvedValueOnce({
 				ok: true,
-				json: () => Promise.resolve([
-					{
-						id: 1,
-						dogName: 'Burek',
-						startDate: '2026-05-10',
-						endDate: '2026-05-12',
-						createdAt: '2026-05-02T10:00:00Z'
-					}
-				])
+				json: () => Promise.resolve(listResponse([reservation()]))
 			})
 			.mockImplementationOnce(() => deletePromise);
 		vi.stubGlobal('fetch', fetch);
@@ -470,15 +422,7 @@ describe('Reservation list', () => {
 		const fetch = vi.fn()
 			.mockResolvedValueOnce({
 				ok: true,
-				json: () => Promise.resolve([
-					{
-						id: 1,
-						dogName: 'Burek',
-						startDate: '2026-05-10',
-						endDate: '2026-05-12',
-						createdAt: '2026-05-02T10:00:00Z'
-					}
-				])
+				json: () => Promise.resolve(listResponse([reservation()]))
 			})
 			.mockResolvedValueOnce(new Response(null, { status: 500 }))
 			.mockImplementationOnce(() => retryPromise);
@@ -501,18 +445,18 @@ describe('Reservation list', () => {
 		const fetch = vi.fn()
 			.mockResolvedValueOnce({
 				ok: true,
-				json: () => Promise.resolve([
-					{
-						id: 1,
+				json: () => Promise.resolve(listResponse([
+					reservation({
+						id: 'local:1',
 						dogName: 'Senior',
 						startDate: '2025-01-10',
 						endDate: '2025-01-12',
 						createdAt: '2025-01-09T10:00:00Z'
-					}
-				])
+					})
+				]))
 			})
 			.mockImplementationOnce(() => Promise.resolve(new Response(null, { status: 204 })))
-			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) });
+			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(listResponse()) });
 		vi.stubGlobal('fetch', fetch);
 
 		render(Page);
@@ -536,18 +480,10 @@ describe('Reservation list', () => {
 		const fetch = vi.fn()
 			.mockResolvedValueOnce({
 				ok: true,
-				json: () => Promise.resolve([
-					{
-						id: 1,
-						dogName: 'Burek',
-						startDate: '2026-05-10',
-						endDate: '2026-05-12',
-						createdAt: '2026-05-02T10:00:00Z'
-					}
-				])
+				json: () => Promise.resolve(listResponse([reservation()]))
 			})
 			.mockImplementationOnce(() => Promise.resolve(new Response(null, { status: 404 })))
-			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) });
+			.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(listResponse()) });
 		vi.stubGlobal('fetch', fetch);
 
 		render(Page);
@@ -565,15 +501,14 @@ describe('Reservation list', () => {
 	it('dims past reservations and tags them as finished', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
 			ok: true,
-			json: () => Promise.resolve([
-				{
-					id: 1,
+			json: () => Promise.resolve(listResponse([
+				reservation({
+					id: 'local:1',
 					dogName: 'Senior',
 					startDate: '2026-04-20',
-					endDate: '2026-04-21',
-					createdAt: '2026-05-02T10:00:00Z'
-				}
-			])
+					endDate: '2026-04-21'
+				})
+			]))
 		}));
 
 		render(Page);

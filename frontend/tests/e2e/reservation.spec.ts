@@ -1,9 +1,14 @@
 import { expect, test } from '@playwright/test';
 
+const listResponse = (items: unknown[] = []) => ({
+	items,
+	sources: { local: { status: 'ok' } }
+});
+
 test('empty reservation list shows empty state', async ({ page }) => {
 	await page.route('http://localhost:5174/api/reservations', async (route) => {
 		if (route.request().method() === 'GET') {
-			await route.fulfill({ json: [] });
+			await route.fulfill({ json: listResponse() });
 			return;
 		}
 
@@ -32,22 +37,24 @@ test('user can add a reservation and see it in the list', async ({ page }) => {
 
 test('user can delete a past reservation through the same workflow', async ({ page }) => {
 	const pastReservation = {
-		id: 99,
+		id: 'local:99',
+		source: 'local',
 		dogName: 'Senior',
 		startDate: '2025-01-10',
 		endDate: '2025-01-12',
-		createdAt: '2025-01-09T10:00:00Z'
+		createdAt: '2025-01-09T10:00:00Z',
+		canDelete: true
 	};
 	let deleted = false;
 
 	await page.route('http://localhost:5174/api/reservations', async (route) => {
 		if (route.request().method() === 'GET') {
-			await route.fulfill({ json: deleted ? [] : [pastReservation] });
+			await route.fulfill({ json: listResponse(deleted ? [] : [pastReservation]) });
 			return;
 		}
 		await route.fallback();
 	});
-	await page.route('http://localhost:5174/api/reservations/99', async (route) => {
+	await page.route('http://localhost:5174/api/reservations/local:99', async (route) => {
 		if (route.request().method() === 'DELETE') {
 			deleted = true;
 			await route.fulfill({ status: 204 });
@@ -74,22 +81,24 @@ test('user can delete a past reservation through the same workflow', async ({ pa
 
 test('deleting the last reservation shows empty state', async ({ page }) => {
 	const reservation = {
-		id: 1,
+		id: 'local:1',
+		source: 'local',
 		dogName: 'Burek',
 		startDate: '2026-06-10',
 		endDate: '2026-06-12',
-		createdAt: '2026-05-02T10:00:00Z'
+		createdAt: '2026-05-02T10:00:00Z',
+		canDelete: true
 	};
 	let deleted = false;
 
 	await page.route('http://localhost:5174/api/reservations', async (route) => {
 		if (route.request().method() === 'GET') {
-			await route.fulfill({ json: deleted ? [] : [reservation] });
+			await route.fulfill({ json: listResponse(deleted ? [] : [reservation]) });
 			return;
 		}
 		await route.fallback();
 	});
-	await page.route('http://localhost:5174/api/reservations/1', async (route) => {
+	await page.route('http://localhost:5174/api/reservations/local:1', async (route) => {
 		if (route.request().method() === 'DELETE') {
 			deleted = true;
 			await route.fulfill({ status: 204 });
@@ -109,21 +118,23 @@ test('deleting the last reservation shows empty state', async ({ page }) => {
 
 test('treats a 404 delete as successful absence', async ({ page }) => {
 	const reservation = {
-		id: 42,
+		id: 'local:42',
+		source: 'local',
 		dogName: 'Fantom',
 		startDate: '2026-06-10',
 		endDate: '2026-06-12',
-		createdAt: '2026-05-02T10:00:00Z'
+		createdAt: '2026-05-02T10:00:00Z',
+		canDelete: true
 	};
 
 	await page.route('http://localhost:5174/api/reservations', async (route) => {
 		if (route.request().method() === 'GET') {
-			await route.fulfill({ json: [reservation] });
+			await route.fulfill({ json: listResponse([reservation]) });
 			return;
 		}
 		await route.fallback();
 	});
-	await page.route('http://localhost:5174/api/reservations/42', async (route) => {
+	await page.route('http://localhost:5174/api/reservations/local:42', async (route) => {
 		if (route.request().method() === 'DELETE') {
 			await route.fulfill({ status: 404 });
 			return;
