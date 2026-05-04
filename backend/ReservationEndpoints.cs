@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-
 public static class ReservationEndpoints
 {
     public static IEndpointRouteBuilder MapReservationEndpoints(this IEndpointRouteBuilder app)
@@ -38,24 +36,10 @@ public static class ReservationEndpoints
             return Results.Created($"/api/reservations/{response.Id}", response);
         });
 
-        app.MapGet("/api/reservations", async (KennelDb db, IGoogleCalendarReservationSource googleSource) =>
+        app.MapGet("/api/reservations", async (IReservationAggregationService reservationAggregation) =>
         {
-            var localReservations = await db.Reservations
-                .OrderBy(r => r.StartDate)
-                .Select(r => new ReservationResponse(r))
-                .ToListAsync();
-            var googleReservations = await googleSource.GetReservationsAsync();
-            var reservations = localReservations
-                .Concat(googleReservations.Items)
-                .OrderBy(r => r.StartDate, StringComparer.Ordinal)
-                .ThenBy(r => r.EndDate, StringComparer.Ordinal)
-                .ThenBy(r => r.DogName, StringComparer.CurrentCulture)
-                .ThenBy(r => r.Source, StringComparer.Ordinal)
-                .ToList();
-
-            return Results.Ok(new ReservationListResponse(
-                reservations,
-                new ReservationSources(new SourceStatus("ok"), googleReservations.Status)));
+            var response = await reservationAggregation.GetReservationsAsync();
+            return Results.Ok(response);
         });
 
         app.MapDelete("/api/reservations/{id}", async (string id, KennelDb db) =>

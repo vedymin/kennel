@@ -17,6 +17,18 @@ public class FakeGoogleCalendarReservationSource : IGoogleCalendarReservationSou
         Task.FromResult(Result);
 }
 
+public class FakeReservationAggregationService(ReservationListResponse response) : IReservationAggregationService
+{
+    public Task<ReservationListResponse> GetReservationsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(response);
+}
+
+public class ThrowingGoogleCalendarReservationSource : IGoogleCalendarReservationSource
+{
+    public Task<GoogleReservationSourceResult> GetReservationsAsync(CancellationToken cancellationToken = default) =>
+        throw new InvalidOperationException("Endpoint should use the aggregation service.");
+}
+
 public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
     private readonly WebApplicationFactory<Program> _factory;
@@ -44,6 +56,8 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
                 if (googleSourceDescriptor != null) services.Remove(googleSourceDescriptor);
 
                 services.AddSingleton<IGoogleCalendarReservationSource>(_fakeGoogleSource);
+                services.AddScoped<ILocalReservationSource, LocalReservationSource>();
+                services.AddScoped<IReservationAggregationService, ReservationAggregationService>();
             });
         });
     }
@@ -276,6 +290,68 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal("local", list[1].GetProperty("source").GetString());
         Assert.Equal("ok", body.GetProperty("sources").GetProperty("local").GetProperty("status").GetString());
         Assert.Equal("ok", body.GetProperty("sources").GetProperty("google").GetProperty("status").GetString());
+    }
+
+    [Theory]
+    [InlineData("not_connected")]
+    [InlineData("not_configured")]
+    [InlineData("unauthorized")]
+    [InlineData("error")]
+    public async Task Get_WhenGoogleSourceUnavailable_ReturnsLocalReservationsWithGoogleStatus(string googleStatus)
+    {
+        var client = CreateClient();
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(3));
+        await SeedReservation("Azor", startDate, startDate.AddDays(1));
+        _fakeGoogleSource.Result = GoogleReservationSourceResult.Empty(googleStatus);
+
+        var response = await client.GetAsync("/api/reservations");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var item = Assert.Single(GetItems(body));
+        Assert.Equal("local", item.GetProperty("source").GetString());
+        Assert.Equal("Azor", item.GetProperty("dogName").GetString());
+        Assert.Equal("ok", body.GetProperty("sources").GetProperty("local").GetProperty("status").GetString());
+        Assert.Equal(googleStatus, body.GetProperty("sources").GetProperty("google").GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task Get_UsesReservationAggregationService()
+    {
+        var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IReservationAggregationService)).ToList())
+                    services.Remove(descriptor);
+                foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IGoogleCalendarReservationSource)).ToList())
+                    services.Remove(descriptor);
+
+                services.AddSingleton<IReservationAggregationService>(new FakeReservationAggregationService(
+                    new ReservationListResponse(
+                        [
+                            new ReservationResponse(
+                                "google:from-aggregation",
+                                "google",
+                                "Figa",
+                                "2026-06-01",
+                                "2026-06-02",
+                                null,
+                                false)
+                        ],
+                        new ReservationSources(new SourceStatus("ok"), new SourceStatus("not_configured")))));
+                services.AddSingleton<IGoogleCalendarReservationSource, ThrowingGoogleCalendarReservationSource>();
+            });
+        });
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/reservations");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var item = Assert.Single(GetItems(body));
+        Assert.Equal("google:from-aggregation", item.GetProperty("id").GetString());
+        Assert.Equal("not_configured", body.GetProperty("sources").GetProperty("google").GetProperty("status").GetString());
     }
 
     [Fact]
