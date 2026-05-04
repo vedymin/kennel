@@ -1,0 +1,95 @@
+# Project-local Codex execpolicy rules.
+#
+# These allow common non-destructive project workflow commands to run outside
+# the sandbox without repeating one-off approvals. Avoid adding broad prefixes
+# such as ["git"], ["gh"], ["npm"], ["dotnet"], or destructive commands.
+
+prefix_rule(
+    pattern = ["git", "switch"],
+    decision = "allow",
+    justification = "Branch switching/creation is part of the project PR workflow.",
+)
+
+prefix_rule(
+    pattern = ["git", "add"],
+    decision = "allow",
+    justification = "Staging selected files is part of the project PR workflow.",
+)
+
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "allow",
+    justification = "Creating commits is part of the project PR workflow.",
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "allow",
+    justification = "Pushing issue branches is part of the project PR workflow.",
+)
+
+prefix_rule(
+    pattern = ["gh", "pr"],
+    decision = "allow",
+    justification = "Pull request creation, inspection, and comments are part of the project review workflow.",
+)
+
+prefix_rule(
+    pattern = ["gh", "issue"],
+    decision = "allow",
+    justification = "Issue inspection is part of the project issue workflow.",
+)
+
+prefix_rule(
+    pattern = ["gh", "api"],
+    decision = "allow",
+    justification = "GitHub API access is used for PR review comments not exposed by gh pr view.",
+)
+
+prefix_rule(
+    pattern = ["dotnet", "test"],
+    decision = "allow",
+    justification = "Backend test execution is required for verification.",
+)
+
+prefix_rule(
+    pattern = ["dotnet", "run"],
+    decision = "allow",
+    justification = "Running the backend locally is required for manual and e2e verification.",
+)
+
+prefix_rule(
+    pattern = ["dotnet", "ef"],
+    decision = "allow",
+    justification = "EF Core migrations are part of the backend workflow.",
+)
+
+prefix_rule(
+    pattern = ["npm", "test"],
+    decision = "allow",
+    justification = "Frontend unit test execution is required for verification.",
+)
+
+prefix_rule(
+    pattern = ["npm", "run", "check"],
+    decision = "allow",
+    justification = "Svelte type checking is required for verification.",
+)
+
+prefix_rule(
+    pattern = ["npm", "run", "test:e2e"],
+    decision = "allow",
+    justification = "Playwright e2e tests are required for verification.",
+)
+
+prefix_rule(
+    pattern = ["npm", "run", "dev"],
+    decision = "allow",
+    justification = "Running the frontend dev server is required for manual verification.",
+)
+
+prefix_rule(
+    pattern = ["npm", "install"],
+    decision = "allow",
+    justification = "Installing declared frontend dependencies is part of setup and maintenance.",
+)
