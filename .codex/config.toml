@@ -1,0 +1,6 @@
+# Project-local Codex config.
+#
+# Codex loads this layer only for trusted projects. This repository is trusted
+# in ~/.codex/config.toml, so rules under .codex/rules/ are eligible at startup.
+
+approval_policy = "on-request"
