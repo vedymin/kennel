@@ -3,9 +3,17 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Page from './+page.svelte';
 
-const listResponse = (items: unknown[] = []) => ({
+const listResponse = (
+	items: unknown[] = [],
+	sources: Record<string, { status: string }> = { local: { status: 'ok' } }
+) => ({
 	items,
-	sources: { local: { status: 'ok' } }
+	sources
+});
+
+const googleListResponse = (status: string) => listResponse([], {
+	local: { status: 'ok' },
+	google: { status }
 });
 
 const reservation = (overrides: Record<string, unknown> = {}) => ({
@@ -515,5 +523,70 @@ describe('Reservation list', () => {
 
 		const row = await screen.findByRole('row', { name: /Senior 2026-04-20 2026-04-21 zakończona/i });
 		expect(row).toHaveClass('opacity-50');
+	});
+});
+
+describe('Google Calendar connection status', () => {
+	it('shows a connect prompt when Google Calendar is not connected', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve(googleListResponse('not_connected'))
+		}));
+
+		render(Page);
+
+		const link = await screen.findByRole('link', { name: 'Connect Google Calendar' });
+		expect(link).toHaveAttribute('href', '/api/google/login');
+	});
+
+	it('shows a reconnect prompt when Google Calendar authorization has expired', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve(googleListResponse('unauthorized'))
+		}));
+
+		render(Page);
+
+		const link = await screen.findByRole('link', { name: 'Reconnect' });
+		expect(link).toHaveAttribute('href', '/api/google/login');
+	});
+
+	it('shows a warning banner when Google Calendar source has an error', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve(googleListResponse('error'))
+		}));
+
+		render(Page);
+
+		expect(await screen.findByRole('alert')).toHaveTextContent(
+			'Google Calendar reservations could not be loaded.'
+		);
+	});
+
+	it('does not show a Google Calendar banner when the source is healthy', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve(googleListResponse('ok'))
+		}));
+
+		render(Page);
+
+		await screen.findByText(/Brak rezerwacji/);
+		expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+		expect(screen.queryByRole('link', { name: /google calendar|reconnect/i })).not.toBeInTheDocument();
+	});
+
+	it('does not show a Google Calendar banner when the source is not configured', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve(googleListResponse('not_configured'))
+		}));
+
+		render(Page);
+
+		await screen.findByText(/Brak rezerwacji/);
+		expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+		expect(screen.queryByRole('link', { name: /google calendar|reconnect/i })).not.toBeInTheDocument();
 	});
 });

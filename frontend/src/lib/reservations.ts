@@ -12,6 +12,7 @@ export interface Reservation {
 
 export interface ReservationSources {
 	local: { status: string };
+	google?: { status: string };
 }
 
 export type ListReservationsResult =
