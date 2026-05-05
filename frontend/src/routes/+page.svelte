@@ -3,7 +3,8 @@
 		createReservation,
 		deleteReservation,
 		listReservations,
-		type Reservation
+		type Reservation,
+		type ReservationSources
 	} from '$lib/reservations';
 
 	let dogName = $state('');
@@ -17,8 +18,10 @@
 	let reservationToDelete = $state<Reservation | null>(null);
 	let deleting = $state(false);
 	let deleteError = $state('');
+	let sources = $state<ReservationSources | null>(null);
 
 	const canSubmit = $derived(dogName.trim() !== '' && startDate !== '' && endDate !== '');
+	const googleStatus = $derived(sources?.google?.status ?? 'not_configured');
 
 	async function loadReservations() {
 		loading = true;
@@ -26,8 +29,10 @@
 		const result = await listReservations();
 		if (result.ok) {
 			reservations = result.reservations;
+			sources = result.sources;
 		} else {
 			fetchError = true;
+			sources = null;
 		}
 		loading = false;
 	}
@@ -53,6 +58,12 @@
 	function isPast(reservation: Reservation): boolean {
 		const today = new Date().toISOString().split('T')[0];
 		return reservation.endDate < today;
+	}
+
+	function sourceLabel(source: string): string {
+		if (source === 'local') return 'Lokalna';
+		if (source === 'google') return 'Google';
+		return source;
 	}
 
 	function requestDelete(reservation: Reservation) {
@@ -87,6 +98,26 @@
 
 <main class="max-w-2xl mx-auto p-6">
 	<h1 class="text-2xl font-bold mb-6">Hotel dla psów — rezerwacje</h1>
+
+	{#if googleStatus === 'not_connected'}
+		<div class="mb-6 rounded border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+			<p class="mb-3 font-medium">Google Calendar is not connected.</p>
+			<a href="/api/google/login" class="inline-flex rounded bg-blue-700 px-3 py-2 text-white">
+				Connect Google Calendar
+			</a>
+		</div>
+	{:else if googleStatus === 'unauthorized'}
+		<div class="mb-6 rounded border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+			<p class="mb-3 font-medium">Google Calendar authorization has expired.</p>
+			<a href="/api/google/login" class="inline-flex rounded bg-blue-700 px-3 py-2 text-white">
+				Reconnect
+			</a>
+		</div>
+	{:else if googleStatus === 'error'}
+		<div role="alert" class="mb-6 rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+			Google Calendar reservations could not be loaded.
+		</div>
+	{/if}
 
 	<form
 		onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}
@@ -156,6 +187,7 @@
 					<th class="py-2">Imię psa</th>
 					<th class="py-2">Od</th>
 					<th class="py-2">Do</th>
+					<th class="py-2">Źródło</th>
 					<th class="py-2">Akcje</th>
 				</tr>
 			</thead>
@@ -165,17 +197,20 @@
 						<td class="py-2">{r.dogName}</td>
 						<td class="py-2">{r.startDate}</td>
 						<td class="py-2">{r.endDate}</td>
+						<td class="py-2">{sourceLabel(r.source)}</td>
 						<td class="py-2">
 							<div class="flex items-center gap-3">
 								<span>{isPast(r) ? 'zakończona' : ''}</span>
-								<button
-									type="button"
-									aria-label={`Usuń rezerwację dla ${r.dogName}`}
-									onclick={() => requestDelete(r)}
-									class="text-red-700 underline"
-								>
-									Usuń
-								</button>
+								{#if r.canDelete}
+									<button
+										type="button"
+										aria-label={`Usuń rezerwację dla ${r.dogName}`}
+										onclick={() => requestDelete(r)}
+										class="text-red-700 underline"
+									>
+										Usuń
+									</button>
+								{/if}
 							</div>
 						</td>
 					</tr>

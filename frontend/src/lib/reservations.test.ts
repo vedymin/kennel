@@ -14,7 +14,7 @@ describe('Reservation API adapter', () => {
 				canDelete: true
 			}
 		];
-		const sources = { local: { status: 'ok' } };
+		const sources = { local: { status: 'ok' }, google: { status: 'not_connected' } };
 		const fetcher = vi.fn().mockResolvedValue({
 			ok: true,
 			json: () => Promise.resolve({ items: reservations, sources })

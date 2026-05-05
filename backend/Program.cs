@@ -13,6 +13,11 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<IGoogleOAuthService, GoogleOAuthService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped(_ => new GoogleCalendarEventMapper(TimeZoneInfo.Local));
+builder.Services.AddHttpClient<IGoogleCalendarReservationSource, GoogleCalendarReservationSource>();
+builder.Services.AddScoped<ILocalReservationSource, LocalReservationSource>();
+builder.Services.AddScoped<IReservationAggregationService, ReservationAggregationService>();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
