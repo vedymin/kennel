@@ -257,6 +257,28 @@ describe('Reservation list', () => {
 		expect(await screen.findByRole('row', { name: /Burek 2026-05-10 2026-05-12/i })).toBeInTheDocument();
 	});
 
+	it('renders Google Calendar reservations returned by the aggregate API', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+			ok: true,
+			json: () => Promise.resolve(listResponse([
+				reservation({
+					id: 'google:event-1',
+					source: 'google',
+					dogName: 'Figa',
+					canDelete: false
+				})
+			], {
+				local: { status: 'ok' },
+				google: { status: 'ok' }
+			}))
+		}));
+
+		render(Page);
+
+		expect(await screen.findByRole('row', { name: /Figa 2026-05-10 2026-05-12 Google/i })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Usuń rezerwację dla Figa' })).not.toBeInTheDocument();
+	});
+
 	it('opens a dog-specific delete confirmation dialog from a row action', async () => {
 		const user = userEvent.setup();
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -521,7 +543,7 @@ describe('Reservation list', () => {
 
 		render(Page);
 
-		const row = await screen.findByRole('row', { name: /Senior 2026-04-20 2026-04-21 zakończona/i });
+		const row = await screen.findByRole('row', { name: /Senior 2026-04-20 2026-04-21 Lokalna zakończona/i });
 		expect(row).toHaveClass('opacity-50');
 	});
 });

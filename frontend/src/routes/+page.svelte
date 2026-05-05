@@ -60,6 +60,12 @@
 		return reservation.endDate < today;
 	}
 
+	function sourceLabel(source: string): string {
+		if (source === 'local') return 'Lokalna';
+		if (source === 'google') return 'Google';
+		return source;
+	}
+
 	function requestDelete(reservation: Reservation) {
 		reservationToDelete = reservation;
 		deleteError = '';
@@ -181,6 +187,7 @@
 					<th class="py-2">Imię psa</th>
 					<th class="py-2">Od</th>
 					<th class="py-2">Do</th>
+					<th class="py-2">Źródło</th>
 					<th class="py-2">Akcje</th>
 				</tr>
 			</thead>
@@ -190,17 +197,20 @@
 						<td class="py-2">{r.dogName}</td>
 						<td class="py-2">{r.startDate}</td>
 						<td class="py-2">{r.endDate}</td>
+						<td class="py-2">{sourceLabel(r.source)}</td>
 						<td class="py-2">
 							<div class="flex items-center gap-3">
 								<span>{isPast(r) ? 'zakończona' : ''}</span>
-								<button
-									type="button"
-									aria-label={`Usuń rezerwację dla ${r.dogName}`}
-									onclick={() => requestDelete(r)}
-									class="text-red-700 underline"
-								>
-									Usuń
-								</button>
+								{#if r.canDelete}
+									<button
+										type="button"
+										aria-label={`Usuń rezerwację dla ${r.dogName}`}
+										onclick={() => requestDelete(r)}
+										class="text-red-700 underline"
+									>
+										Usuń
+									</button>
+								{/if}
 							</div>
 						</td>
 					</tr>
