@@ -1,7 +1,15 @@
 # Agent Instructions
 
-- Use issue branches and pull requests for issue work; do not commit directly to `main`.
-- Keep `.claude/` out of commits unless explicitly requested.
-- When requesting shell escalation, prefer reusable scoped prefixes matching `.codex/rules/default.rules`.
-- Do not request broad command prefixes such as plain `git`, `gh`, `npm`, or `dotnet`.
-- Avoid destructive commands unless the user explicitly asks for them.
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked as GitHub Issues on `vedymin/kennel`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout — one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
