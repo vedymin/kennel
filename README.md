@@ -2,12 +2,14 @@
 
 Kennel is a small hotel-for-dogs reservation system. The backend is a .NET API
 with SQLite persistence, and the frontend is a SvelteKit app for creating and
-viewing reservations.
+viewing reservations. The Android app is a Kotlin/Jetpack Compose client that
+uses the same reservation API.
 
 ## Prerequisites
 
 - .NET 10 SDK
 - Node.js 24
+- Android SDK 35
 - GNU Make
 
 ## Setup
@@ -59,6 +61,12 @@ Run Playwright end-to-end tests:
 make test-e2e
 ```
 
+Run Android unit tests:
+
+```sh
+make test-android
+```
+
 Run all test suites:
 
 ```sh
@@ -73,5 +81,6 @@ make test
 | `make dev-frontend` | Starts the SvelteKit dev server on `localhost:5173`. |
 | `make test-backend` | Runs the backend xUnit integration tests. |
 | `make test-frontend` | Runs the frontend Vitest tests. |
+| `make test-android` | Runs the Android JVM unit tests. |
 | `make test-e2e` | Runs the Playwright end-to-end tests. |
-| `make test` | Runs backend, frontend, and end-to-end test suites. |
+| `make test` | Runs backend, frontend, Android, and end-to-end test suites. |

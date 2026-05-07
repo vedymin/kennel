@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Kennel</string>
+    <string name="app_title">Hotel dla psow - rezerwacje</string>
+    <string name="loading_reservations">Ladowanie...</string>
+    <string name="load_reservations_error">Nie udalo sie pobrac rezerwacji.</string>
+    <string name="retry">Sprobuj ponownie</string>
+    <string name="empty_reservations">Brak rezerwacji.</string>
+    <string name="source">Źródło</string>
+</resources>
