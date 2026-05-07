@@ -30,6 +30,14 @@ Desktop.ini
 .env
 .env.*
 !.env.example
+local.properties
+
+# Android
+.gradle/
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
 
 # Local app data
 backend/*.db
