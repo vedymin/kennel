@@ -1,6 +1,8 @@
 package pl.kennel.app.reservations
 
 import kotlinx.coroutines.test.runTest
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -8,9 +10,82 @@ import retrofit2.Response
 
 class HttpReservationRepositoryTest {
     @Test
+    fun createReservationReturnsNetworkErrorWhenRequestFails() = runTest {
+        val api = FakeReservationApi(createException = IllegalStateException("boom"))
+
+        val result = HttpReservationRepository(api).createReservation(
+            CreateReservationRequest(
+                dogName = "Burek",
+                startDate = "2026-05-10",
+                endDate = "2026-05-12"
+            )
+        )
+
+        assertEquals(CreateReservationResult.NetworkError, result)
+    }
+
+    @Test
+    fun createReservationMapsServerValidationErrors() = runTest {
+        val api = FakeReservationApi(
+            createResponse = Response.error(
+                400,
+                """{"errors":{"dogName":"Imie psa jest wymagane.","endDate":"Data zakonczenia musi byc po dacie rozpoczecia."}}"""
+                    .toResponseBody("application/json".toMediaType())
+            )
+        )
+
+        val result = HttpReservationRepository(api).createReservation(
+            CreateReservationRequest(
+                dogName = "",
+                startDate = "2026-05-10",
+                endDate = "2026-05-10"
+            )
+        )
+
+        assertTrue(result is CreateReservationResult.ValidationError)
+        val validation = result as CreateReservationResult.ValidationError
+        assertEquals("Imie psa jest wymagane.", validation.fieldErrors["dogName"])
+        assertEquals("Data zakonczenia musi byc po dacie rozpoczecia.", validation.fieldErrors["endDate"])
+    }
+
+    @Test
+    fun createReservationPostsRequestAndReturnsCreatedReservation() = runTest {
+        val api = FakeReservationApi(
+            createResponse = Response.success(
+                201,
+                ReservationDto(
+                    id = "local:1",
+                    source = "local",
+                    dogName = "Burek",
+                    startDate = "2026-05-10",
+                    endDate = "2026-05-12",
+                    createdAt = "2026-05-06T10:00:00Z",
+                    canDelete = true
+                )
+            )
+        )
+
+        val result = HttpReservationRepository(api).createReservation(
+            CreateReservationRequest(
+                dogName = "Burek",
+                startDate = "2026-05-10",
+                endDate = "2026-05-12"
+            )
+        )
+
+        assertTrue(result is CreateReservationResult.Success)
+        val success = result as CreateReservationResult.Success
+        assertEquals("Burek", api.createdRequest?.dogName)
+        assertEquals("2026-05-10", api.createdRequest?.startDate)
+        assertEquals("2026-05-12", api.createdRequest?.endDate)
+        assertEquals("local:1", success.reservation.id)
+        assertEquals("Burek", success.reservation.dogName)
+    }
+
+    @Test
     fun listReservationsReturnsReservationsAndSourceStatuses() = runTest {
         val api = FakeReservationApi(
-            response = Response.success(
+            listResponse = Response.success(
                 ReservationListResponseDto(
                     items = listOf(
                         ReservationDto(
@@ -42,8 +117,33 @@ class HttpReservationRepositoryTest {
     }
 
     private class FakeReservationApi(
-        private val response: Response<ReservationListResponseDto>
+        private val listResponse: Response<ReservationListResponseDto> = Response.success(
+            ReservationListResponseDto(
+                items = emptyList(),
+                sources = ReservationSourcesDto(local = SourceStatusDto("ok"))
+            )
+        ),
+        private val createResponse: Response<ReservationDto> = Response.success(
+            ReservationDto(
+                id = "local:1",
+                source = "local",
+                dogName = "Burek",
+                startDate = "2026-05-10",
+                endDate = "2026-05-12",
+                createdAt = "2026-05-06T10:00:00Z",
+                canDelete = true
+            )
+        ),
+        private val createException: Exception? = null
     ) : ReservationApi {
-        override suspend fun listReservations(): Response<ReservationListResponseDto> = response
+        var createdRequest: CreateReservationRequest? = null
+
+        override suspend fun listReservations(): Response<ReservationListResponseDto> = listResponse
+
+        override suspend fun createReservation(request: CreateReservationRequest): Response<ReservationDto> {
+            createException?.let { throw it }
+            createdRequest = request
+            return createResponse
+        }
     }
 }

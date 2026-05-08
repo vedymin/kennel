@@ -20,6 +20,18 @@ data class ReservationSources(
 data class SourceStatus(val status: String)
 
 @Serializable
+data class CreateReservationRequest(
+    val dogName: String,
+    val startDate: String,
+    val endDate: String
+)
+
+@Serializable
+data class ValidationErrorsResponseDto(
+    val errors: Map<String, String>
+)
+
+@Serializable
 data class ReservationListResponseDto(
     val items: List<ReservationDto>,
     val sources: ReservationSourcesDto
