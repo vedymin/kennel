@@ -10,6 +10,39 @@ import retrofit2.Response
 
 class HttpReservationRepositoryTest {
     @Test
+    fun deleteReservationCallsApiAndReturnsSuccess() = runTest {
+        val api = FakeReservationApi(deleteResponse = Response.success(Unit))
+
+        val result = HttpReservationRepository(api).deleteReservation("local:1")
+
+        assertEquals(DeleteReservationResult.Success, result)
+        assertEquals(listOf("local:1"), api.deletedReservationIds)
+    }
+
+    @Test
+    fun deleteReservationTreatsNotFoundAsSuccess() = runTest {
+        val api = FakeReservationApi(
+            deleteResponse = Response.error(
+                404,
+                "".toResponseBody("application/json".toMediaType())
+            )
+        )
+
+        val result = HttpReservationRepository(api).deleteReservation("local:1")
+
+        assertEquals(DeleteReservationResult.Success, result)
+    }
+
+    @Test
+    fun deleteReservationReturnsNetworkErrorWhenRequestFails() = runTest {
+        val api = FakeReservationApi(deleteException = IllegalStateException("boom"))
+
+        val result = HttpReservationRepository(api).deleteReservation("local:1")
+
+        assertEquals(DeleteReservationResult.NetworkError, result)
+    }
+
+    @Test
     fun createReservationReturnsNetworkErrorWhenRequestFails() = runTest {
         val api = FakeReservationApi(createException = IllegalStateException("boom"))
 
@@ -134,9 +167,12 @@ class HttpReservationRepositoryTest {
                 canDelete = true
             )
         ),
-        private val createException: Exception? = null
+        private val createException: Exception? = null,
+        private val deleteResponse: Response<Unit> = Response.success(Unit),
+        private val deleteException: Exception? = null
     ) : ReservationApi {
         var createdRequest: CreateReservationRequest? = null
+        val deletedReservationIds = mutableListOf<String>()
 
         override suspend fun listReservations(): Response<ReservationListResponseDto> = listResponse
 
@@ -144,6 +180,12 @@ class HttpReservationRepositoryTest {
             createException?.let { throw it }
             createdRequest = request
             return createResponse
+        }
+
+        override suspend fun deleteReservation(id: String): Response<Unit> {
+            deleteException?.let { throw it }
+            deletedReservationIds += id
+            return deleteResponse
         }
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -16,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,7 +44,10 @@ fun ReservationsScreen(viewModel: ReservationsViewModel) {
         onStartDateChange = viewModel::updateStartDate,
         onEndDateChange = viewModel::updateEndDate,
         onSubmit = viewModel::submitReservation,
-        onRetry = viewModel::refresh
+        onRetry = viewModel::refresh,
+        onDeleteRequested = viewModel::requestDeleteReservation,
+        onDeleteConfirmed = viewModel::confirmDeleteReservation,
+        onDeleteCanceled = viewModel::cancelDeleteReservation
     )
 }
 
@@ -53,7 +58,10 @@ fun ReservationsScreen(
     onStartDateChange: (String) -> Unit,
     onEndDateChange: (String) -> Unit,
     onSubmit: () -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onDeleteRequested: (String) -> Unit,
+    onDeleteConfirmed: () -> Unit,
+    onDeleteCanceled: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -83,9 +91,37 @@ fun ReservationsScreen(
                 state.isLoading -> Text(stringResource(R.string.loading_reservations))
                 state.hasLoadError -> LoadError(onRetry = onRetry)
                 state.reservations.isEmpty() -> Text(stringResource(R.string.empty_reservations))
-                else -> ReservationList(reservations = state.reservations)
+                else -> ReservationList(
+                    reservations = state.reservations,
+                    onDeleteRequested = onDeleteRequested
+                )
             }
         }
+    }
+
+    state.deleteConfirmation?.let { confirmation ->
+        AlertDialog(
+            onDismissRequest = onDeleteCanceled,
+            title = { Text(stringResource(R.string.delete_reservation_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.delete_reservation_message,
+                        confirmation.dogName
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = onDeleteConfirmed) {
+                    Text(stringResource(R.string.delete_reservation_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDeleteCanceled) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
     }
 }
 
@@ -172,13 +208,19 @@ private fun LoadError(onRetry: () -> Unit) {
 }
 
 @Composable
-private fun ReservationList(reservations: List<ReservationRowUiState>) {
+private fun ReservationList(
+    reservations: List<ReservationRowUiState>,
+    onDeleteRequested: (String) -> Unit
+) {
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(reservations, key = { it.id }) { reservation ->
-            ReservationRow(reservation = reservation)
+            ReservationRow(
+                reservation = reservation,
+                onDeleteRequested = onDeleteRequested
+            )
             HorizontalDivider()
         }
     }
@@ -192,13 +234,18 @@ private fun ReservationRowPreview() {
             id = "1",
             dogName = "Burek",
             dateRange = "2026-05-07 - 2026-05-10",
-            sourceLabel = "Lokalna"
-        )
+            sourceLabel = "Lokalna",
+            canDelete = true
+        ),
+        onDeleteRequested = {}
     )
 }
 
 @Composable
-private fun ReservationRow(reservation: ReservationRowUiState) {
+private fun ReservationRow(
+    reservation: ReservationRowUiState,
+    onDeleteRequested: (String) -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -221,7 +268,11 @@ private fun ReservationRow(reservation: ReservationRowUiState) {
             )
         }
 
-        Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(10.dp)) {
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
             Text(
                 text = stringResource(R.string.source),
                 style = MaterialTheme.typography.labelSmall
@@ -230,6 +281,18 @@ private fun ReservationRow(reservation: ReservationRowUiState) {
                 text = reservation.sourceLabel,
                 style = MaterialTheme.typography.bodyMedium
             )
+            if (reservation.canDelete) {
+                if (reservation.isDeleting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    TextButton(onClick = { onDeleteRequested(reservation.id) }) {
+                        Text(stringResource(R.string.delete_reservation))
+                    }
+                }
+            }
         }
     }
 }

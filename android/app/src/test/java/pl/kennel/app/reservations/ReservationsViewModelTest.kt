@@ -66,6 +66,199 @@ class ReservationsViewModelTest {
     }
 
     @Test
+    fun refreshExposesDeleteCapabilityOnlyForDeletableReservations() = runTest(dispatcher) {
+        val repository = FakeReservationRepository(
+            ListReservationsResult.Success(
+                reservations = listOf(
+                    Reservation(
+                        id = "local:1",
+                        source = "local",
+                        dogName = "Burek",
+                        startDate = "2026-05-10",
+                        endDate = "2026-05-12",
+                        createdAt = "2026-05-06T10:00:00Z",
+                        canDelete = true
+                    ),
+                    Reservation(
+                        id = "google:1",
+                        source = "google",
+                        dogName = "Azor",
+                        startDate = "2026-05-11",
+                        endDate = "2026-05-13",
+                        createdAt = null,
+                        canDelete = false
+                    )
+                ),
+                sources = ReservationSources(
+                    local = SourceStatus("ok"),
+                    google = SourceStatus("ok")
+                )
+            )
+        )
+        val viewModel = ReservationsViewModel(repository)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        val rows = viewModel.uiState.value.reservations
+        assertTrue(rows.single { it.id == "local:1" }.canDelete)
+        assertFalse(rows.single { it.id == "google:1" }.canDelete)
+    }
+
+    @Test
+    fun requestDeleteReservationShowsConfirmationWithoutDeleting() = runTest(dispatcher) {
+        val repository = FakeReservationRepository(
+            ListReservationsResult.Success(
+                reservations = listOf(
+                    Reservation(
+                        id = "local:1",
+                        source = "local",
+                        dogName = "Burek",
+                        startDate = "2026-05-10",
+                        endDate = "2026-05-12",
+                        createdAt = "2026-05-06T10:00:00Z",
+                        canDelete = true
+                    )
+                ),
+                sources = ReservationSources(
+                    local = SourceStatus("ok"),
+                    google = SourceStatus("not_connected")
+                )
+            )
+        )
+        val viewModel = ReservationsViewModel(repository)
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        viewModel.requestDeleteReservation("local:1")
+        advanceUntilIdle()
+
+        assertEquals(
+            ReservationDeleteConfirmationUiState(id = "local:1", dogName = "Burek"),
+            viewModel.uiState.value.deleteConfirmation
+        )
+        assertEquals(emptyList<String>(), repository.deleteRequests)
+    }
+
+    @Test
+    fun cancelDeleteReservationDismissesConfirmationWithoutDeleting() = runTest(dispatcher) {
+        val repository = FakeReservationRepository(
+            ListReservationsResult.Success(
+                reservations = listOf(
+                    Reservation(
+                        id = "local:1",
+                        source = "local",
+                        dogName = "Burek",
+                        startDate = "2026-05-10",
+                        endDate = "2026-05-12",
+                        createdAt = "2026-05-06T10:00:00Z",
+                        canDelete = true
+                    )
+                ),
+                sources = ReservationSources(
+                    local = SourceStatus("ok"),
+                    google = SourceStatus("not_connected")
+                )
+            )
+        )
+        val viewModel = ReservationsViewModel(repository)
+        viewModel.refresh()
+        advanceUntilIdle()
+        viewModel.requestDeleteReservation("local:1")
+
+        viewModel.cancelDeleteReservation()
+        advanceUntilIdle()
+
+        assertEquals(null, viewModel.uiState.value.deleteConfirmation)
+        assertEquals(emptyList<String>(), repository.deleteRequests)
+    }
+
+    @Test
+    fun confirmDeleteReservationDeletesAndReloadsReservations() = runTest(dispatcher) {
+        val repository = FakeReservationRepository(
+            listResults = listOf(
+                ListReservationsResult.Success(
+                    reservations = listOf(
+                        Reservation(
+                            id = "local:1",
+                            source = "local",
+                            dogName = "Burek",
+                            startDate = "2026-05-10",
+                            endDate = "2026-05-12",
+                            createdAt = "2026-05-06T10:00:00Z",
+                            canDelete = true
+                        )
+                    ),
+                    sources = ReservationSources(
+                        local = SourceStatus("ok"),
+                        google = SourceStatus("not_connected")
+                    )
+                ),
+                ListReservationsResult.Success(
+                    reservations = emptyList(),
+                    sources = ReservationSources(
+                        local = SourceStatus("ok"),
+                        google = SourceStatus("not_connected")
+                    )
+                )
+            ),
+            deleteResult = DeleteReservationResult.Success
+        )
+        val viewModel = ReservationsViewModel(repository)
+        viewModel.refresh()
+        advanceUntilIdle()
+        viewModel.requestDeleteReservation("local:1")
+
+        viewModel.confirmDeleteReservation()
+        advanceUntilIdle()
+
+        assertEquals(listOf("local:1"), repository.deleteRequests)
+        assertEquals(2, repository.listCalls)
+        assertEquals(null, viewModel.uiState.value.deleteConfirmation)
+        assertEquals(emptyList<ReservationRowUiState>(), viewModel.uiState.value.reservations)
+    }
+
+    @Test
+    fun confirmDeleteReservationMarksRowDeletingWhileRequestIsInFlight() = runTest(dispatcher) {
+        val deleteResult = CompletableDeferred<DeleteReservationResult>()
+        val repository = FakeReservationRepository(
+            listResult = ListReservationsResult.Success(
+                reservations = listOf(
+                    Reservation(
+                        id = "local:1",
+                        source = "local",
+                        dogName = "Burek",
+                        startDate = "2026-05-10",
+                        endDate = "2026-05-12",
+                        createdAt = "2026-05-06T10:00:00Z",
+                        canDelete = true
+                    )
+                ),
+                sources = ReservationSources(
+                    local = SourceStatus("ok"),
+                    google = SourceStatus("not_connected")
+                )
+            ),
+            deleteResultProvider = { deleteResult.await() }
+        )
+        val viewModel = ReservationsViewModel(repository)
+        viewModel.refresh()
+        advanceUntilIdle()
+        viewModel.requestDeleteReservation("local:1")
+
+        viewModel.confirmDeleteReservation()
+        runCurrent()
+
+        assertEquals(null, viewModel.uiState.value.deleteConfirmation)
+        assertTrue(viewModel.uiState.value.reservations.single().isDeleting)
+
+        deleteResult.complete(DeleteReservationResult.NetworkError)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.reservations.single().isDeleting)
+    }
+
+    @Test
     fun submitReservationWithEmptyDogNameShowsFieldErrorAndDoesNotCreateReservation() = runTest(dispatcher) {
         val repository = FakeReservationRepository(
             listResult = ListReservationsResult.Success(
@@ -269,21 +462,37 @@ class ReservationsViewModelTest {
     }
 
     private class FakeReservationRepository(
-        private val listResult: ListReservationsResult,
+        private val listResult: ListReservationsResult = ListReservationsResult.Success(
+            reservations = emptyList(),
+            sources = ReservationSources(
+                local = SourceStatus("ok"),
+                google = SourceStatus("not_connected")
+            )
+        ),
+        private val listResults: List<ListReservationsResult> = listOf(listResult),
         private val createResult: CreateReservationResult = CreateReservationResult.NetworkError,
-        private val createResultProvider: (suspend () -> CreateReservationResult)? = null
+        private val createResultProvider: (suspend () -> CreateReservationResult)? = null,
+        private val deleteResult: DeleteReservationResult = DeleteReservationResult.NetworkError,
+        private val deleteResultProvider: (suspend () -> DeleteReservationResult)? = null
     ) : ReservationRepository {
         val createRequests = mutableListOf<CreateReservationRequest>()
+        val deleteRequests = mutableListOf<String>()
         var listCalls = 0
 
         override suspend fun listReservations(): ListReservationsResult {
+            val result = listResults.getOrElse(listCalls) { listResults.last() }
             listCalls += 1
-            return listResult
+            return result
         }
 
         override suspend fun createReservation(request: CreateReservationRequest): CreateReservationResult {
             createRequests += request
             return createResultProvider?.invoke() ?: createResult
         }
+
+        override suspend fun deleteReservation(id: String): DeleteReservationResult =
+            (deleteResultProvider?.invoke() ?: deleteResult).also {
+                deleteRequests += id
+            }
     }
 }

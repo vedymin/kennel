@@ -13,7 +13,13 @@ data class ReservationsUiState(
     val isLoading: Boolean = false,
     val hasLoadError: Boolean = false,
     val reservations: List<ReservationRowUiState> = emptyList(),
-    val form: ReservationFormUiState = ReservationFormUiState()
+    val form: ReservationFormUiState = ReservationFormUiState(),
+    val deleteConfirmation: ReservationDeleteConfirmationUiState? = null
+)
+
+data class ReservationDeleteConfirmationUiState(
+    val id: String,
+    val dogName: String
 )
 
 data class ReservationFormUiState(
@@ -31,7 +37,9 @@ data class ReservationRowUiState(
     val id: String,
     val dogName: String,
     val dateRange: String,
-    val sourceLabel: String
+    val sourceLabel: String,
+    val canDelete: Boolean,
+    val isDeleting: Boolean = false
 )
 
 class ReservationsViewModel(
@@ -137,6 +145,43 @@ class ReservationsViewModel(
         }
     }
 
+    fun requestDeleteReservation(id: String) {
+        val row = _uiState.value.reservations.firstOrNull { it.id == id && it.canDelete } ?: return
+
+        _uiState.update {
+            it.copy(deleteConfirmation = ReservationDeleteConfirmationUiState(id = row.id, dogName = row.dogName))
+        }
+    }
+
+    fun cancelDeleteReservation() {
+        _uiState.update { it.copy(deleteConfirmation = null) }
+    }
+
+    fun confirmDeleteReservation() {
+        val confirmation = _uiState.value.deleteConfirmation ?: return
+
+        viewModelScope.launch {
+            _uiState.update { state ->
+                state.copy(
+                    deleteConfirmation = null,
+                    reservations = state.reservations.markDeleting(confirmation.id, isDeleting = true)
+                )
+            }
+
+            when (repository.deleteReservation(confirmation.id)) {
+                DeleteReservationResult.Success -> {
+                    loadReservations()
+                }
+
+                DeleteReservationResult.NetworkError -> {
+                    _uiState.update { state ->
+                        state.copy(reservations = state.reservations.markDeleting(confirmation.id, isDeleting = false))
+                    }
+                }
+            }
+        }
+    }
+
     private suspend fun loadReservations() {
         _uiState.update { it.copy(isLoading = true, hasLoadError = false) }
 
@@ -177,8 +222,18 @@ private fun Reservation.toRowUiState(): ReservationRowUiState =
         id = id,
         dogName = dogName,
         dateRange = "$startDate - $endDate",
-        sourceLabel = source.toSourceLabel()
+        sourceLabel = source.toSourceLabel(),
+        canDelete = canDelete
     )
+
+private fun List<ReservationRowUiState>.markDeleting(id: String, isDeleting: Boolean): List<ReservationRowUiState> =
+    map { row ->
+        if (row.id == id) {
+            row.copy(isDeleting = isDeleting)
+        } else {
+            row
+        }
+    }
 
 private fun String.toSourceLabel(): String =
     when (this) {

@@ -5,6 +5,7 @@ import kotlinx.serialization.json.Json
 interface ReservationRepository {
     suspend fun listReservations(): ListReservationsResult
     suspend fun createReservation(request: CreateReservationRequest): CreateReservationResult
+    suspend fun deleteReservation(id: String): DeleteReservationResult
 }
 
 sealed interface ListReservationsResult {
@@ -20,6 +21,11 @@ sealed interface CreateReservationResult {
     data class Success(val reservation: Reservation) : CreateReservationResult
     data class ValidationError(val fieldErrors: Map<String, String>) : CreateReservationResult
     data object NetworkError : CreateReservationResult
+}
+
+sealed interface DeleteReservationResult {
+    data object Success : DeleteReservationResult
+    data object NetworkError : DeleteReservationResult
 }
 
 class HttpReservationRepository(
@@ -63,6 +69,24 @@ class HttpReservationRepository(
             CreateReservationResult.Success(body.toDomain())
         } catch (_: Exception) {
             CreateReservationResult.NetworkError
+        }
+    }
+
+    override suspend fun deleteReservation(id: String): DeleteReservationResult {
+        return try {
+            val response = api.deleteReservation(id)
+
+            if (response.code() == 404) {
+                return DeleteReservationResult.Success
+            }
+
+            if (!response.isSuccessful) {
+                return DeleteReservationResult.NetworkError
+            }
+
+            DeleteReservationResult.Success
+        } catch (_: Exception) {
+            DeleteReservationResult.NetworkError
         }
     }
 
