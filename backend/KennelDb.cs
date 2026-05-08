@@ -7,6 +7,7 @@ public class KennelDb(DbContextOptions<KennelDb> options) : DbContext(options)
     public DbSet<Owner> Owners => Set<Owner>();
     public DbSet<Dog> Dogs => Set<Dog>();
     public DbSet<Domain.Kennel> Kennels => Set<Domain.Kennel>();
+    public DbSet<Occupation> Occupations => Set<Occupation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -47,6 +48,19 @@ public class KennelDb(DbContextOptions<KennelDb> options) : DbContext(options)
                 .WithMany(dog => dog.Reservations)
                 .HasForeignKey(reservation => reservation.DogId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasMany(reservation => reservation.Occupations)
+                .WithOne(occupation => occupation.Reservation)
+                .HasForeignKey(occupation => occupation.ReservationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Occupation>(entity =>
+        {
+            entity.HasOne(occupation => occupation.Kennel)
+                .WithMany()
+                .HasForeignKey(occupation => occupation.KennelId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
