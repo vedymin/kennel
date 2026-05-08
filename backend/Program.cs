@@ -35,6 +35,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors("FrontendDev");
 
 app.MapReservationEndpoints();
+app.MapOwnerDogEndpoints();
 app.MapGoogleOAuthEndpoints();
 
 app.Run();
