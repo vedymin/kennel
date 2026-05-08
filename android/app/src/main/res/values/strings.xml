@@ -6,4 +6,9 @@
     <string name="retry">Sprobuj ponownie</string>
     <string name="empty_reservations">Brak rezerwacji.</string>
     <string name="source">Źródło</string>
+    <string name="dog_name">Imie psa</string>
+    <string name="start_date">Data rozpoczecia</string>
+    <string name="end_date">Data zakonczenia</string>
+    <string name="date_placeholder">YYYY-MM-DD</string>
+    <string name="create_reservation">Dodaj rezerwacje</string>
 </resources>

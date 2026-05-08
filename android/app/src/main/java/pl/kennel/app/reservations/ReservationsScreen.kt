@@ -6,11 +6,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +38,10 @@ fun ReservationsScreen(viewModel: ReservationsViewModel) {
 
     ReservationsScreen(
         state = state,
+        onDogNameChange = viewModel::updateDogName,
+        onStartDateChange = viewModel::updateStartDate,
+        onEndDateChange = viewModel::updateEndDate,
+        onSubmit = viewModel::submitReservation,
         onRetry = viewModel::refresh
     )
 }
@@ -42,6 +49,10 @@ fun ReservationsScreen(viewModel: ReservationsViewModel) {
 @Composable
 fun ReservationsScreen(
     state: ReservationsUiState,
+    onDogNameChange: (String) -> Unit,
+    onStartDateChange: (String) -> Unit,
+    onEndDateChange: (String) -> Unit,
+    onSubmit: () -> Unit,
     onRetry: () -> Unit
 ) {
     Surface(
@@ -60,11 +71,91 @@ fun ReservationsScreen(
                 fontWeight = FontWeight.Bold
             )
 
+            ReservationForm(
+                form = state.form,
+                onDogNameChange = onDogNameChange,
+                onStartDateChange = onStartDateChange,
+                onEndDateChange = onEndDateChange,
+                onSubmit = onSubmit
+            )
+
             when {
                 state.isLoading -> Text(stringResource(R.string.loading_reservations))
                 state.hasLoadError -> LoadError(onRetry = onRetry)
                 state.reservations.isEmpty() -> Text(stringResource(R.string.empty_reservations))
                 else -> ReservationList(reservations = state.reservations)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReservationForm(
+    form: ReservationFormUiState,
+    onDogNameChange: (String) -> Unit,
+    onStartDateChange: (String) -> Unit,
+    onEndDateChange: (String) -> Unit,
+    onSubmit: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        OutlinedTextField(
+            value = form.dogName,
+            onValueChange = onDogNameChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.dog_name)) },
+            singleLine = true,
+            isError = form.dogNameError != null,
+            supportingText = form.dogNameError?.let { message -> { Text(message) } },
+            enabled = !form.isSubmitting
+        )
+
+        OutlinedTextField(
+            value = form.startDate,
+            onValueChange = onStartDateChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.start_date)) },
+            placeholder = { Text(stringResource(R.string.date_placeholder)) },
+            singleLine = true,
+            isError = form.startDateError != null,
+            supportingText = form.startDateError?.let { message -> { Text(message) } },
+            enabled = !form.isSubmitting
+        )
+
+        OutlinedTextField(
+            value = form.endDate,
+            onValueChange = onEndDateChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.end_date)) },
+            placeholder = { Text(stringResource(R.string.date_placeholder)) },
+            singleLine = true,
+            isError = form.endDateError != null,
+            supportingText = form.endDateError?.let { message -> { Text(message) } },
+            enabled = !form.isSubmitting
+        )
+
+        form.submitError?.let { message ->
+            Text(
+                text = message,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+
+        Button(
+            onClick = onSubmit,
+            enabled = !form.isSubmitting,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (form.isSubmitting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(stringResource(R.string.create_reservation))
             }
         }
     }
