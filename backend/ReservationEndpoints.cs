@@ -37,6 +37,11 @@ public static class ReservationEndpoints
             if (errors.Count > 0)
                 return Results.BadRequest(new { errors });
 
+            await ValidateKennelSharing(null, dog!, requestedOccupations, db, errors);
+
+            if (errors.Count > 0)
+                return Results.BadRequest(new { errors });
+
             var reservation = new Reservation
             {
                 Dog = dog,
@@ -85,6 +90,12 @@ public static class ReservationEndpoints
             var errors = new Dictionary<string, string>();
             ValidateOccupationCoverage(reservation.StartDate, reservation.EndDate, requestedOccupations, errors);
             await ValidateKennelsExist(requestedOccupations, db, errors);
+
+            if (errors.Count > 0)
+                return Results.BadRequest(new { errors });
+
+            if (reservation.Dog is not null)
+                await ValidateKennelSharing(reservation.Id, reservation.Dog, requestedOccupations, db, errors);
 
             if (errors.Count > 0)
                 return Results.BadRequest(new { errors });
@@ -231,6 +242,70 @@ public static class ReservationEndpoints
 
         if (expectedStart != reservationEnd)
             errors["occupations"] = "Occupations must fully cover the reservation date range without gaps.";
+    }
+
+    private static async Task ValidateKennelSharing(
+        int? reservationId,
+        Dog dog,
+        IReadOnlyList<CreateOccupationRequest> requestedOccupations,
+        KennelDb db,
+        Dictionary<string, string> errors)
+    {
+        var kennelIds = requestedOccupations.Select(occupation => occupation.KennelId).Distinct().ToList();
+        var requestedStart = requestedOccupations.Min(occupation => occupation.StartDate);
+        var requestedEnd = requestedOccupations.Max(occupation => occupation.EndDate);
+
+        var overlappingOccupations = await db.Occupations
+            .Include(occupation => occupation.Reservation)
+            .ThenInclude(reservation => reservation.Dog)
+            .Where(occupation => kennelIds.Contains(occupation.KennelId))
+            .Where(occupation => !reservationId.HasValue || occupation.ReservationId != reservationId.Value)
+            .Where(occupation => occupation.StartDate < requestedEnd && requestedStart < occupation.EndDate)
+            .ToListAsync();
+        var overlappingDogIds = overlappingOccupations
+            .Select(occupation => occupation.Reservation.DogId)
+            .OfType<int>()
+            .Distinct()
+            .ToList();
+        var incompatibilities = dog.Id == 0 || overlappingDogIds.Count == 0
+            ? []
+            : await db.Incompatibilities
+                .Where(incompatibility =>
+                    (incompatibility.DogId1 == dog.Id && overlappingDogIds.Contains(incompatibility.DogId2)) ||
+                    (incompatibility.DogId2 == dog.Id && overlappingDogIds.Contains(incompatibility.DogId1)))
+                .ToListAsync();
+
+        var ownerId = dog.OwnerId != 0 ? dog.OwnerId : dog.Owner.Id;
+
+        foreach (var requestedOccupation in requestedOccupations)
+        {
+            foreach (var existingOccupation in overlappingOccupations)
+            {
+                if (existingOccupation.KennelId != requestedOccupation.KennelId ||
+                    existingOccupation.StartDate >= requestedOccupation.EndDate ||
+                    requestedOccupation.StartDate >= existingOccupation.EndDate)
+                    continue;
+
+                var existingDog = existingOccupation.Reservation.Dog;
+                if (existingDog is null)
+                    continue;
+
+                if (existingDog.OwnerId != ownerId)
+                {
+                    errors["occupations"] = "Dogs from different owners cannot share a kennel.";
+                    return;
+                }
+
+                var dogsAreIncompatible = incompatibilities.Any(incompatibility =>
+                    (incompatibility.DogId1 == dog.Id && incompatibility.DogId2 == existingDog.Id) ||
+                    (incompatibility.DogId2 == dog.Id && incompatibility.DogId1 == existingDog.Id));
+                if (dogsAreIncompatible)
+                {
+                    errors["occupations"] = "Incompatible dogs cannot share a kennel.";
+                    return;
+                }
+            }
+        }
     }
 
     private static bool TryParseLocalReservationId(string publicId, out int localId)

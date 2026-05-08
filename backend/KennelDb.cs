@@ -8,6 +8,7 @@ public class KennelDb(DbContextOptions<KennelDb> options) : DbContext(options)
     public DbSet<Dog> Dogs => Set<Dog>();
     public DbSet<Domain.Kennel> Kennels => Set<Domain.Kennel>();
     public DbSet<Occupation> Occupations => Set<Occupation>();
+    public DbSet<Incompatibility> Incompatibilities => Set<Incompatibility>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -61,6 +62,19 @@ public class KennelDb(DbContextOptions<KennelDb> options) : DbContext(options)
                 .WithMany()
                 .HasForeignKey(occupation => occupation.KennelId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Incompatibility>(entity =>
+        {
+            entity.HasOne(incompatibility => incompatibility.Dog1)
+                .WithMany()
+                .HasForeignKey(incompatibility => incompatibility.DogId1)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(incompatibility => incompatibility.Dog2)
+                .WithMany()
+                .HasForeignKey(incompatibility => incompatibility.DogId2)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

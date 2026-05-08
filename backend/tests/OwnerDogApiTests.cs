@@ -55,6 +55,14 @@ public class OwnerDogApiTests : IClassFixture<WebApplicationFactory<Program>>, I
         return body.GetProperty("id").GetInt32();
     }
 
+    private static async Task<int> CreateIncompatibility(HttpClient client, int dogId1, int dogId2)
+    {
+        var response = await client.PostAsJsonAsync("/api/incompatibilities", new { dogId1, dogId2 });
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        return body.GetProperty("id").GetInt32();
+    }
+
     [Fact]
     public async Task PostOwner_ValidName_Returns201WithBody()
     {
@@ -195,5 +203,66 @@ public class OwnerDogApiTests : IClassFixture<WebApplicationFactory<Program>>, I
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(body.GetProperty("errors").TryGetProperty("name", out _));
+    }
+
+    [Fact]
+    public async Task PostIncompatibility_ForDogsWithDifferentOwners_Returns400WithError()
+    {
+        var client = CreateClient();
+        var annaId = await CreateOwner(client, "Anna Kowalska");
+        var janId = await CreateOwner(client, "Jan Nowak");
+        var burekId = await CreateDog(client, "Burek", annaId);
+        var azorId = await CreateDog(client, "Azor", janId);
+
+        var response = await client.PostAsJsonAsync("/api/incompatibilities", new
+        {
+            dogId1 = burekId,
+            dogId2 = azorId
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("errors").TryGetProperty("dogs", out _));
+    }
+
+    [Fact]
+    public async Task PostIncompatibility_ForDogsWithSameOwner_Returns201WithBody()
+    {
+        var client = CreateClient();
+        var ownerId = await CreateOwner(client, "Anna Kowalska");
+        var burekId = await CreateDog(client, "Burek", ownerId);
+        var azorId = await CreateDog(client, "Azor", ownerId);
+
+        var response = await client.PostAsJsonAsync("/api/incompatibilities", new
+        {
+            dogId1 = burekId,
+            dogId2 = azorId
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var id = body.GetProperty("id").GetInt32();
+        Assert.True(id > 0);
+        Assert.Equal(burekId, body.GetProperty("dogId1").GetInt32());
+        Assert.Equal(azorId, body.GetProperty("dogId2").GetInt32());
+        Assert.EndsWith($"/api/incompatibilities/{id}", response.Headers.Location!.ToString());
+    }
+
+    [Fact]
+    public async Task DeleteIncompatibility_ExistingIncompatibility_Returns204Then404()
+    {
+        var client = CreateClient();
+        var ownerId = await CreateOwner(client, "Anna Kowalska");
+        var burekId = await CreateDog(client, "Burek", ownerId);
+        var azorId = await CreateDog(client, "Azor", ownerId);
+        var incompatibilityId = await CreateIncompatibility(client, burekId, azorId);
+
+        var response = await client.DeleteAsync($"/api/incompatibilities/{incompatibilityId}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var afterDelete = await client.DeleteAsync($"/api/incompatibilities/{incompatibilityId}");
+        Assert.Equal(HttpStatusCode.NotFound, afterDelete.StatusCode);
     }
 }

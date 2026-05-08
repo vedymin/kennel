@@ -92,6 +92,15 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         occupations = Occupations((kennelId, startDate, endDate))
     };
 
+    private static object ReservationPayload(int ownerId, int dogId, DateOnly startDate, DateOnly endDate, int kennelId) => new
+    {
+        ownerId,
+        dogId,
+        startDate = startDate.ToString("yyyy-MM-dd"),
+        endDate = endDate.ToString("yyyy-MM-dd"),
+        occupations = Occupations((kennelId, startDate, endDate))
+    };
+
     private static async Task<string> CreateReservation(HttpClient client, string dogName, DateOnly startDate, DateOnly endDate)
     {
         var kennelId = await CreateKennel(client, $"Boks dla {dogName}");
@@ -122,6 +131,14 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
     private static async Task<int> CreateDog(HttpClient client, string name, int ownerId)
     {
         var response = await client.PostAsJsonAsync("/api/dogs", new { name, ownerId });
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        return body.GetProperty("id").GetInt32();
+    }
+
+    private static async Task<int> CreateIncompatibility(HttpClient client, int dogId1, int dogId2)
+    {
+        var response = await client.PostAsJsonAsync("/api/incompatibilities", new { dogId1, dogId2 });
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
         return body.GetProperty("id").GetInt32();
@@ -315,6 +332,98 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task Post_WithDifferentOwnerDogInOccupiedKennel_Returns400WithError()
+    {
+        var client = CreateClient();
+        var annaId = await CreateOwner(client, "Anna Kowalska");
+        var janId = await CreateOwner(client, "Jan Nowak");
+        var burekId = await CreateDog(client, "Burek", annaId);
+        var azorId = await CreateDog(client, "Azor", janId);
+        var kennelId = await CreateKennel(client, "Boks 1");
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var endDate = startDate.AddDays(3);
+        await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload(annaId, burekId, startDate, endDate, kennelId));
+
+        var response = await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload(janId, azorId, startDate.AddDays(1), endDate.AddDays(1), kennelId));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("errors").TryGetProperty("occupations", out _));
+    }
+
+    [Fact]
+    public async Task Post_WithCompatibleSameOwnerDogInOccupiedKennel_Returns201()
+    {
+        var client = CreateClient();
+        var ownerId = await CreateOwner(client, "Anna Kowalska");
+        var burekId = await CreateDog(client, "Burek", ownerId);
+        var azorId = await CreateDog(client, "Azor", ownerId);
+        var kennelId = await CreateKennel(client, "Boks 1");
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var endDate = startDate.AddDays(3);
+        await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload(ownerId, burekId, startDate, endDate, kennelId));
+
+        var response = await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload(ownerId, azorId, startDate.AddDays(1), endDate.AddDays(1), kennelId));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Post_WithIncompatibleSameOwnerDogInOccupiedKennel_Returns400WithError()
+    {
+        var client = CreateClient();
+        var ownerId = await CreateOwner(client, "Anna Kowalska");
+        var burekId = await CreateDog(client, "Burek", ownerId);
+        var azorId = await CreateDog(client, "Azor", ownerId);
+        var kennelId = await CreateKennel(client, "Boks 1");
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var endDate = startDate.AddDays(3);
+        await CreateIncompatibility(client, burekId, azorId);
+        await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload(ownerId, burekId, startDate, endDate, kennelId));
+
+        var response = await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload(ownerId, azorId, startDate.AddDays(1), endDate.AddDays(1), kennelId));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("errors").TryGetProperty("occupations", out _));
+    }
+
+    [Fact]
+    public async Task Post_AfterDeletingIncompatibility_AllowsSameOwnerDogInOccupiedKennel()
+    {
+        var client = CreateClient();
+        var ownerId = await CreateOwner(client, "Anna Kowalska");
+        var burekId = await CreateDog(client, "Burek", ownerId);
+        var azorId = await CreateDog(client, "Azor", ownerId);
+        var kennelId = await CreateKennel(client, "Boks 1");
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var endDate = startDate.AddDays(3);
+        var incompatibilityId = await CreateIncompatibility(client, burekId, azorId);
+        await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload(ownerId, burekId, startDate, endDate, kennelId));
+        await client.DeleteAsync($"/api/incompatibilities/{incompatibilityId}");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload(ownerId, azorId, startDate.AddDays(1), endDate.AddDays(1), kennelId));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
     public async Task PutOccupations_ReplacesOccupations()
     {
         var client = CreateClient();
@@ -355,6 +464,68 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
             occupations = Occupations(
                 (kennelId, startDate, startDate.AddDays(2)),
                 (kennelId, startDate.AddDays(3), endDate))
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("errors").TryGetProperty("occupations", out _));
+    }
+
+    [Fact]
+    public async Task PutOccupations_WithDifferentOwnerDogInOccupiedKennel_Returns400WithError()
+    {
+        var client = CreateClient();
+        var annaId = await CreateOwner(client, "Anna Kowalska");
+        var janId = await CreateOwner(client, "Jan Nowak");
+        var burekId = await CreateDog(client, "Burek", annaId);
+        var azorId = await CreateDog(client, "Azor", janId);
+        var firstKennelId = await CreateKennel(client, "Boks 1");
+        var secondKennelId = await CreateKennel(client, "Boks 2");
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var endDate = startDate.AddDays(3);
+        await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload(annaId, burekId, startDate, endDate, firstKennelId));
+        var secondReservation = await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload(janId, azorId, startDate, endDate, secondKennelId));
+        var secondReservationBody = await secondReservation.Content.ReadFromJsonAsync<JsonElement>();
+        var secondReservationId = secondReservationBody.GetProperty("id").GetString();
+
+        var response = await client.PutAsJsonAsync($"/api/reservations/{secondReservationId}/occupations", new
+        {
+            occupations = Occupations((firstKennelId, startDate, endDate))
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("errors").TryGetProperty("occupations", out _));
+    }
+
+    [Fact]
+    public async Task PutOccupations_WithIncompatibleSameOwnerDogInOccupiedKennel_Returns400WithError()
+    {
+        var client = CreateClient();
+        var ownerId = await CreateOwner(client, "Anna Kowalska");
+        var burekId = await CreateDog(client, "Burek", ownerId);
+        var azorId = await CreateDog(client, "Azor", ownerId);
+        var firstKennelId = await CreateKennel(client, "Boks 1");
+        var secondKennelId = await CreateKennel(client, "Boks 2");
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var endDate = startDate.AddDays(3);
+        await CreateIncompatibility(client, burekId, azorId);
+        await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload(ownerId, burekId, startDate, endDate, firstKennelId));
+        var secondReservation = await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload(ownerId, azorId, startDate, endDate, secondKennelId));
+        var secondReservationBody = await secondReservation.Content.ReadFromJsonAsync<JsonElement>();
+        var secondReservationId = secondReservationBody.GetProperty("id").GetString();
+
+        var response = await client.PutAsJsonAsync($"/api/reservations/{secondReservationId}/occupations", new
+        {
+            occupations = Occupations((firstKennelId, startDate, endDate))
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
