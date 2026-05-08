@@ -11,4 +11,9 @@
     <string name="end_date">Data zakonczenia</string>
     <string name="date_placeholder">YYYY-MM-DD</string>
     <string name="create_reservation">Dodaj rezerwacje</string>
+    <string name="delete_reservation">Usun</string>
+    <string name="delete_reservation_title">Usun rezerwacje?</string>
+    <string name="delete_reservation_message">Usun rezerwacje psa %1$s?</string>
+    <string name="delete_reservation_confirm">Usun</string>
+    <string name="cancel">Anuluj</string>
 </resources>
