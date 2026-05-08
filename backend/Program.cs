@@ -36,6 +36,7 @@ app.UseCors("FrontendDev");
 
 app.MapReservationEndpoints();
 app.MapOwnerDogEndpoints();
+app.MapIncompatibilityEndpoints();
 app.MapKennelEndpoints();
 app.MapGoogleOAuthEndpoints();
 
