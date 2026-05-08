@@ -66,6 +66,79 @@ class ReservationsViewModelTest {
     }
 
     @Test
+    fun refreshShowsGoogleConnectionBannerWhenGoogleSourceIsNotConnected() = runTest(dispatcher) {
+        val repository = FakeReservationRepository(successWithGoogleStatus("not_connected"))
+        val viewModel = ReservationsViewModel(repository)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        assertEquals(
+            SourceStatusBannerUiState(
+                message = "Polacz Kalendarz Google w aplikacji webowej, aby zobaczyc rezerwacje z kalendarza.",
+                tone = SourceStatusBannerTone.Info
+            ),
+            viewModel.uiState.value.googleSourceBanner
+        )
+    }
+
+    @Test
+    fun refreshShowsGoogleReconnectBannerWhenGoogleSourceIsUnauthorized() = runTest(dispatcher) {
+        val repository = FakeReservationRepository(successWithGoogleStatus("unauthorized"))
+        val viewModel = ReservationsViewModel(repository)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        assertEquals(
+            SourceStatusBannerUiState(
+                message = "Polacz ponownie Kalendarz Google w aplikacji webowej.",
+                tone = SourceStatusBannerTone.Info
+            ),
+            viewModel.uiState.value.googleSourceBanner
+        )
+    }
+
+    @Test
+    fun refreshShowsWarningBannerWhenGoogleSourceHasError() = runTest(dispatcher) {
+        val repository = FakeReservationRepository(successWithGoogleStatus("error"))
+        val viewModel = ReservationsViewModel(repository)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        assertEquals(
+            SourceStatusBannerUiState(
+                message = "Nie udalo sie pobrac rezerwacji z Kalendarza Google.",
+                tone = SourceStatusBannerTone.Warning
+            ),
+            viewModel.uiState.value.googleSourceBanner
+        )
+    }
+
+    @Test
+    fun refreshDoesNotShowGoogleSourceBannerWhenGoogleSourceIsOk() = runTest(dispatcher) {
+        val repository = FakeReservationRepository(successWithGoogleStatus("ok"))
+        val viewModel = ReservationsViewModel(repository)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        assertEquals(null, viewModel.uiState.value.googleSourceBanner)
+    }
+
+    @Test
+    fun refreshDoesNotShowGoogleSourceBannerWhenGoogleSourceIsNotConfigured() = runTest(dispatcher) {
+        val repository = FakeReservationRepository(successWithGoogleStatus("not_configured"))
+        val viewModel = ReservationsViewModel(repository)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        assertEquals(null, viewModel.uiState.value.googleSourceBanner)
+    }
+
+    @Test
     fun submitReservationWithEmptyDogNameShowsFieldErrorAndDoesNotCreateReservation() = runTest(dispatcher) {
         val repository = FakeReservationRepository(
             listResult = ListReservationsResult.Success(
@@ -287,3 +360,12 @@ class ReservationsViewModelTest {
         }
     }
 }
+
+private fun successWithGoogleStatus(status: String): ListReservationsResult.Success =
+    ListReservationsResult.Success(
+        reservations = emptyList(),
+        sources = ReservationSources(
+            local = SourceStatus("ok"),
+            google = SourceStatus(status)
+        )
+    )
