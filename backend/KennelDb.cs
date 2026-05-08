@@ -6,6 +6,7 @@ public class KennelDb(DbContextOptions<KennelDb> options) : DbContext(options)
     public DbSet<GoogleConnection> GoogleConnections => Set<GoogleConnection>();
     public DbSet<Owner> Owners => Set<Owner>();
     public DbSet<Dog> Dogs => Set<Dog>();
+    public DbSet<Domain.Kennel> Kennels => Set<Domain.Kennel>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,6 +33,12 @@ public class KennelDb(DbContextOptions<KennelDb> options) : DbContext(options)
                 .WithMany(owner => owner.Dogs)
                 .HasForeignKey(dog => dog.OwnerId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Domain.Kennel>(entity =>
+        {
+            entity.Property(kennel => kennel.Name)
+                .IsRequired();
         });
 
         modelBuilder.Entity<Reservation>(entity =>
