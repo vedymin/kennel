@@ -12,9 +12,20 @@ import java.time.LocalDate
 data class ReservationsUiState(
     val isLoading: Boolean = false,
     val hasLoadError: Boolean = false,
+    val googleSourceBanner: SourceStatusBannerUiState? = null,
     val reservations: List<ReservationRowUiState> = emptyList(),
     val form: ReservationFormUiState = ReservationFormUiState()
 )
+
+data class SourceStatusBannerUiState(
+    val message: String,
+    val tone: SourceStatusBannerTone
+)
+
+enum class SourceStatusBannerTone {
+    Info,
+    Warning
+}
 
 data class ReservationFormUiState(
     val dogName: String = "",
@@ -146,6 +157,7 @@ class ReservationsViewModel(
                     it.copy(
                         isLoading = false,
                         hasLoadError = false,
+                        googleSourceBanner = result.sources.google.toGoogleSourceBannerUiState(),
                         reservations = result.reservations.map { reservation ->
                             reservation.toRowUiState()
                         }
@@ -185,4 +197,24 @@ private fun String.toSourceLabel(): String =
         "local" -> "Lokalna"
         "google" -> "Google"
         else -> this
+    }
+
+private fun SourceStatus.toGoogleSourceBannerUiState(): SourceStatusBannerUiState? =
+    when (status) {
+        "not_connected" -> SourceStatusBannerUiState(
+            message = "Polacz Kalendarz Google w aplikacji webowej, aby zobaczyc rezerwacje z kalendarza.",
+            tone = SourceStatusBannerTone.Info
+        )
+
+        "unauthorized" -> SourceStatusBannerUiState(
+            message = "Polacz ponownie Kalendarz Google w aplikacji webowej.",
+            tone = SourceStatusBannerTone.Info
+        )
+
+        "error" -> SourceStatusBannerUiState(
+            message = "Nie udalo sie pobrac rezerwacji z Kalendarza Google.",
+            tone = SourceStatusBannerTone.Warning
+        )
+
+        else -> null
     }

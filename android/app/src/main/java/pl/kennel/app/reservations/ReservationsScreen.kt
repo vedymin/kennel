@@ -79,6 +79,10 @@ fun ReservationsScreen(
                 onSubmit = onSubmit
             )
 
+            state.googleSourceBanner?.let { banner ->
+                SourceStatusBanner(banner = banner)
+            }
+
             when {
                 state.isLoading -> Text(stringResource(R.string.loading_reservations))
                 state.hasLoadError -> LoadError(onRetry = onRetry)
@@ -86,6 +90,31 @@ fun ReservationsScreen(
                 else -> ReservationList(reservations = state.reservations)
             }
         }
+    }
+}
+
+@Composable
+private fun SourceStatusBanner(banner: SourceStatusBannerUiState) {
+    val containerColor = when (banner.tone) {
+        SourceStatusBannerTone.Info -> MaterialTheme.colorScheme.secondaryContainer
+        SourceStatusBannerTone.Warning -> MaterialTheme.colorScheme.errorContainer
+    }
+    val contentColor = when (banner.tone) {
+        SourceStatusBannerTone.Info -> MaterialTheme.colorScheme.onSecondaryContainer
+        SourceStatusBannerTone.Warning -> MaterialTheme.colorScheme.onErrorContainer
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = containerColor,
+        contentColor = contentColor,
+        shape = MaterialTheme.shapes.small
+    ) {
+        Text(
+            text = banner.message,
+            modifier = Modifier.padding(16.dp),
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }
 
