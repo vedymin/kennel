@@ -19,6 +19,7 @@ dist/
 .vs/
 .vscode/
 .idea/
+.claude/settings.local.json
 *.swp
 
 # OS
