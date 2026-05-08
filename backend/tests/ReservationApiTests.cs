@@ -72,17 +72,59 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
     private static JsonElement[] GetItems(JsonElement body) =>
         body.GetProperty("items").EnumerateArray().ToArray();
 
+    private static object[] Occupations(params (int KennelId, DateOnly StartDate, DateOnly EndDate)[] occupations) =>
+        occupations
+            .Select(occupation => new
+            {
+                kennelId = occupation.KennelId,
+                startDate = occupation.StartDate.ToString("yyyy-MM-dd"),
+                endDate = occupation.EndDate.ToString("yyyy-MM-dd")
+            })
+            .Cast<object>()
+            .ToArray();
+
+    private static object ReservationPayload(string ownerName, string dogName, DateOnly startDate, DateOnly endDate, int kennelId) => new
+    {
+        ownerName,
+        dogName,
+        startDate = startDate.ToString("yyyy-MM-dd"),
+        endDate = endDate.ToString("yyyy-MM-dd"),
+        occupations = Occupations((kennelId, startDate, endDate))
+    };
+
     private static async Task<string> CreateReservation(HttpClient client, string dogName, DateOnly startDate, DateOnly endDate)
     {
-        var response = await client.PostAsJsonAsync("/api/reservations", new
-        {
-            dogName,
-            startDate = startDate.ToString("yyyy-MM-dd"),
-            endDate = endDate.ToString("yyyy-MM-dd")
-        });
+        var kennelId = await CreateKennel(client, $"Boks dla {dogName}");
+        var response = await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload("Anna Kowalska", dogName, startDate, endDate, kennelId));
         var created = await response.Content.ReadFromJsonAsync<JsonElement>();
 
         return created.GetProperty("id").GetString()!;
+    }
+
+    private static async Task<int> CreateKennel(HttpClient client, string name)
+    {
+        var response = await client.PostAsJsonAsync("/api/kennels", new { name });
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        return body.GetProperty("id").GetInt32();
+    }
+
+    private static async Task<int> CreateOwner(HttpClient client, string name)
+    {
+        var response = await client.PostAsJsonAsync("/api/owners", new { name });
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        return body.GetProperty("id").GetInt32();
+    }
+
+    private static async Task<int> CreateDog(HttpClient client, string name, int ownerId)
+    {
+        var response = await client.PostAsJsonAsync("/api/dogs", new { name, ownerId });
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        return body.GetProperty("id").GetInt32();
     }
 
     private async Task SeedReservation(string dogName, DateOnly startDate, DateOnly endDate)
@@ -105,12 +147,17 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         var client = CreateClient();
         var tomorrow = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
         var dayAfter = DateOnly.FromDateTime(DateTime.Today.AddDays(2));
+        var kennelId = await CreateKennel(client, "Boks 1");
 
         var response = await client.PostAsJsonAsync("/api/reservations", new
         {
+            ownerName = "Anna Kowalska",
             dogName = "Burek",
             startDate = tomorrow.ToString("yyyy-MM-dd"),
-            endDate = dayAfter.ToString("yyyy-MM-dd")
+            endDate = dayAfter.ToString("yyyy-MM-dd"),
+            arrivalTime = "13:30",
+            departureTime = "10:15",
+            occupations = Occupations((kennelId, tomorrow, dayAfter))
         });
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -126,6 +173,193 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal("local", body.GetProperty("source").GetString());
         Assert.True(body.GetProperty("canDelete").GetBoolean());
         Assert.False(string.IsNullOrEmpty(body.GetProperty("createdAt").GetString()));
+        Assert.Equal("Anna Kowalska", body.GetProperty("ownerName").GetString());
+        Assert.True(body.GetProperty("dogId").GetInt32() > 0);
+        Assert.Equal("13:30", body.GetProperty("arrivalTime").GetString());
+        Assert.Equal("10:15", body.GetProperty("departureTime").GetString());
+    }
+
+    [Fact]
+    public async Task Post_WithInlineOwnerDogAndOccupation_CreatesReservation()
+    {
+        var client = CreateClient();
+        var kennelId = await CreateKennel(client, "Boks 1");
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var endDate = startDate.AddDays(3);
+
+        var response = await client.PostAsJsonAsync("/api/reservations", new
+        {
+            ownerName = "Anna Kowalska",
+            dogName = "Burek",
+            startDate = startDate.ToString("yyyy-MM-dd"),
+            endDate = endDate.ToString("yyyy-MM-dd"),
+            occupations = new[]
+            {
+                new
+                {
+                    kennelId,
+                    startDate = startDate.ToString("yyyy-MM-dd"),
+                    endDate = endDate.ToString("yyyy-MM-dd")
+                }
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Anna Kowalska", body.GetProperty("ownerName").GetString());
+        Assert.Equal("Burek", body.GetProperty("dogName").GetString());
+        Assert.True(body.GetProperty("ownerId").GetInt32() > 0);
+        Assert.True(body.GetProperty("dogId").GetInt32() > 0);
+        var occupation = Assert.Single(body.GetProperty("occupations").EnumerateArray());
+        Assert.True(occupation.GetProperty("id").GetInt32() > 0);
+        Assert.Equal(kennelId, occupation.GetProperty("kennelId").GetInt32());
+        Assert.Equal(startDate.ToString("yyyy-MM-dd"), occupation.GetProperty("startDate").GetString());
+        Assert.Equal(endDate.ToString("yyyy-MM-dd"), occupation.GetProperty("endDate").GetString());
+    }
+
+    [Fact]
+    public async Task Post_WithOccupationGap_Returns400WithError()
+    {
+        var client = CreateClient();
+        var kennelId = await CreateKennel(client, "Boks 1");
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var endDate = startDate.AddDays(4);
+
+        var response = await client.PostAsJsonAsync("/api/reservations", new
+        {
+            ownerName = "Anna Kowalska",
+            dogName = "Burek",
+            startDate = startDate.ToString("yyyy-MM-dd"),
+            endDate = endDate.ToString("yyyy-MM-dd"),
+            occupations = Occupations(
+                (kennelId, startDate, startDate.AddDays(2)),
+                (kennelId, startDate.AddDays(3), endDate))
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("errors").TryGetProperty("occupations", out _));
+    }
+
+    [Fact]
+    public async Task Post_WithoutOccupations_Returns400WithError()
+    {
+        var client = CreateClient();
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var endDate = startDate.AddDays(1);
+
+        var response = await client.PostAsJsonAsync("/api/reservations", new
+        {
+            ownerName = "Anna Kowalska",
+            dogName = "Burek",
+            startDate = startDate.ToString("yyyy-MM-dd"),
+            endDate = endDate.ToString("yyyy-MM-dd"),
+            occupations = Array.Empty<object>()
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("errors").TryGetProperty("occupations", out _));
+    }
+
+    [Fact]
+    public async Task Post_WithOccupationOverlap_Returns400WithError()
+    {
+        var client = CreateClient();
+        var kennelId = await CreateKennel(client, "Boks 1");
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var endDate = startDate.AddDays(4);
+
+        var response = await client.PostAsJsonAsync("/api/reservations", new
+        {
+            ownerName = "Anna Kowalska",
+            dogName = "Burek",
+            startDate = startDate.ToString("yyyy-MM-dd"),
+            endDate = endDate.ToString("yyyy-MM-dd"),
+            occupations = Occupations(
+                (kennelId, startDate, startDate.AddDays(3)),
+                (kennelId, startDate.AddDays(2), endDate))
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("errors").TryGetProperty("occupations", out _));
+    }
+
+    [Fact]
+    public async Task Post_WithExistingDogNameForOwner_ReusesDog()
+    {
+        var client = CreateClient();
+        var ownerId = await CreateOwner(client, "Anna Kowalska");
+        var dogId = await CreateDog(client, "Burek", ownerId);
+        var kennelId = await CreateKennel(client, "Boks 1");
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var endDate = startDate.AddDays(1);
+
+        var response = await client.PostAsJsonAsync("/api/reservations", new
+        {
+            ownerId,
+            dogName = "burek",
+            startDate = startDate.ToString("yyyy-MM-dd"),
+            endDate = endDate.ToString("yyyy-MM-dd"),
+            occupations = Occupations((kennelId, startDate, endDate))
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(dogId, body.GetProperty("dogId").GetInt32());
+
+        var dogs = await client.GetFromJsonAsync<JsonElement>($"/api/owners/{ownerId}/dogs");
+        var dog = Assert.Single(dogs.EnumerateArray());
+        Assert.Equal(dogId, dog.GetProperty("id").GetInt32());
+    }
+
+    [Fact]
+    public async Task PutOccupations_ReplacesOccupations()
+    {
+        var client = CreateClient();
+        var firstKennelId = await CreateKennel(client, "Boks 1");
+        var secondKennelId = await CreateKennel(client, "Boks 2");
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var splitDate = startDate.AddDays(2);
+        var endDate = startDate.AddDays(4);
+        var reservationId = await CreateReservation(client, "Burek", startDate, endDate);
+
+        var response = await client.PutAsJsonAsync($"/api/reservations/{reservationId}/occupations", new
+        {
+            occupations = Occupations(
+                (firstKennelId, startDate, splitDate),
+                (secondKennelId, splitDate, endDate))
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var occupations = body.GetProperty("occupations").EnumerateArray().ToArray();
+        Assert.Equal(2, occupations.Length);
+        Assert.Equal(firstKennelId, occupations[0].GetProperty("kennelId").GetInt32());
+        Assert.Equal(secondKennelId, occupations[1].GetProperty("kennelId").GetInt32());
+        Assert.All(occupations, occupation => Assert.True(occupation.GetProperty("id").GetInt32() > 0));
+    }
+
+    [Fact]
+    public async Task PutOccupations_WithGap_Returns400WithError()
+    {
+        var client = CreateClient();
+        var kennelId = await CreateKennel(client, "Boks 1");
+        var startDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var endDate = startDate.AddDays(4);
+        var reservationId = await CreateReservation(client, "Burek", startDate, endDate);
+
+        var response = await client.PutAsJsonAsync($"/api/reservations/{reservationId}/occupations", new
+        {
+            occupations = Occupations(
+                (kennelId, startDate, startDate.AddDays(2)),
+                (kennelId, startDate.AddDays(3), endDate))
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("errors").TryGetProperty("occupations", out _));
     }
 
     [Fact]
@@ -134,12 +368,15 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         var client = CreateClient();
         var tomorrow = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
         var dayAfter = DateOnly.FromDateTime(DateTime.Today.AddDays(2));
+        var kennelId = await CreateKennel(client, "Boks 1");
 
         var response = await client.PostAsJsonAsync("/api/reservations", new
         {
+            ownerName = "Anna Kowalska",
             dogName = "   ",
             startDate = tomorrow.ToString("yyyy-MM-dd"),
-            endDate = dayAfter.ToString("yyyy-MM-dd")
+            endDate = dayAfter.ToString("yyyy-MM-dd"),
+            occupations = Occupations((kennelId, tomorrow, dayAfter))
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -153,12 +390,15 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         var client = CreateClient();
         var tomorrow = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
         var dayAfter = DateOnly.FromDateTime(DateTime.Today.AddDays(2));
+        var kennelId = await CreateKennel(client, "Boks 1");
 
         var response = await client.PostAsJsonAsync("/api/reservations", new
         {
+            ownerName = "Anna Kowalska",
             dogName = new string('A', 51),
             startDate = tomorrow.ToString("yyyy-MM-dd"),
-            endDate = dayAfter.ToString("yyyy-MM-dd")
+            endDate = dayAfter.ToString("yyyy-MM-dd"),
+            occupations = Occupations((kennelId, tomorrow, dayAfter))
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -171,12 +411,15 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
     {
         var client = CreateClient();
         var tomorrow = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var kennelId = await CreateKennel(client, "Boks 1");
 
         var response = await client.PostAsJsonAsync("/api/reservations", new
         {
+            ownerName = "Anna Kowalska",
             dogName = "Burek",
             startDate = tomorrow.ToString("yyyy-MM-dd"),
-            endDate = tomorrow.ToString("yyyy-MM-dd")
+            endDate = tomorrow.ToString("yyyy-MM-dd"),
+            occupations = Occupations((kennelId, tomorrow, tomorrow.AddDays(1)))
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -190,12 +433,15 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         var client = CreateClient();
         var yesterday = DateOnly.FromDateTime(DateTime.Today.AddDays(-1));
         var tomorrow = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var kennelId = await CreateKennel(client, "Boks 1");
 
         var response = await client.PostAsJsonAsync("/api/reservations", new
         {
+            ownerName = "Anna Kowalska",
             dogName = "Burek",
             startDate = yesterday.ToString("yyyy-MM-dd"),
-            endDate = tomorrow.ToString("yyyy-MM-dd")
+            endDate = tomorrow.ToString("yyyy-MM-dd"),
+            occupations = Occupations((kennelId, yesterday, tomorrow))
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -209,14 +455,10 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         var client = CreateClient();
         var tomorrow = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
         var dayAfter = DateOnly.FromDateTime(DateTime.Today.AddDays(2));
+        var kennelId = await CreateKennel(client, "Boks 1");
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/reservations")
         {
-            Content = JsonContent.Create(new
-            {
-                dogName = "Burek",
-                startDate = tomorrow.ToString("yyyy-MM-dd"),
-                endDate = dayAfter.ToString("yyyy-MM-dd")
-            })
+            Content = JsonContent.Create(ReservationPayload("Anna Kowalska", "Burek", tomorrow, dayAfter, kennelId))
         };
         request.Headers.Add("Origin", "http://localhost:5173");
 
@@ -231,19 +473,14 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         var client = CreateClient();
         var day1 = DateOnly.FromDateTime(DateTime.Today.AddDays(3));
         var day2 = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var kennelId = await CreateKennel(client, "Boks 1");
 
-        await client.PostAsJsonAsync("/api/reservations", new
-        {
-            dogName = "Azor",
-            startDate = day1.ToString("yyyy-MM-dd"),
-            endDate = day1.AddDays(1).ToString("yyyy-MM-dd")
-        });
-        await client.PostAsJsonAsync("/api/reservations", new
-        {
-            dogName = "Burek",
-            startDate = day2.ToString("yyyy-MM-dd"),
-            endDate = day2.AddDays(1).ToString("yyyy-MM-dd")
-        });
+        await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload("Anna Kowalska", "Azor", day1, day1.AddDays(1), kennelId));
+        await client.PostAsJsonAsync(
+            "/api/reservations",
+            ReservationPayload("Anna Kowalska", "Burek", day2, day2.AddDays(1), kennelId));
 
         var response = await client.GetAsync("/api/reservations");
 
@@ -393,6 +630,27 @@ public class ReservationApiTests : IClassFixture<WebApplicationFactory<Program>>
         var response = await client.DeleteAsync($"/api/reservations/{id}");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_ExistingReservation_CascadesToOccupations()
+    {
+        var client = CreateClient();
+        var tomorrow = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var id = await CreateReservation(client, "Burek", tomorrow, tomorrow.AddDays(1));
+
+        using (var beforeScope = _factory.Services.CreateScope())
+        {
+            var db = beforeScope.ServiceProvider.GetRequiredService<KennelDb>();
+            Assert.Equal(1, await db.Occupations.CountAsync());
+        }
+
+        var response = await client.DeleteAsync($"/api/reservations/{id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using var afterScope = _factory.Services.CreateScope();
+        var afterDb = afterScope.ServiceProvider.GetRequiredService<KennelDb>();
+        Assert.Equal(0, await afterDb.Occupations.CountAsync());
     }
 
     [Fact]

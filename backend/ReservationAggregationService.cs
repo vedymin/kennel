@@ -17,11 +17,15 @@ public class LocalReservationSource(KennelDb db) : ILocalReservationSource
     public async Task<LocalReservationSourceResult> GetReservationsAsync(CancellationToken cancellationToken = default)
     {
         var reservations = await db.Reservations
+            .Include(r => r.Dog)
+            .ThenInclude(dog => dog!.Owner)
+            .Include(r => r.Occupations)
             .OrderBy(r => r.StartDate)
-            .Select(r => new ReservationResponse(r))
             .ToListAsync(cancellationToken);
 
-        return new LocalReservationSourceResult(reservations, new SourceStatus("ok"));
+        return new LocalReservationSourceResult(
+            reservations.Select(r => new ReservationResponse(r)).ToList(),
+            new SourceStatus("ok"));
     }
 }
 

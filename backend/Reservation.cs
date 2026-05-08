@@ -6,5 +6,8 @@ public class Reservation
     public Dog? Dog { get; set; }
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
+    public TimeOnly? ArrivalTime { get; set; }
+    public TimeOnly? DepartureTime { get; set; }
     public DateTime CreatedAt { get; set; }
+    public List<Occupation> Occupations { get; set; } = [];
 }
